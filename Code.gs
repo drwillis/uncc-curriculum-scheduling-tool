@@ -49,8 +49,9 @@ function onOpen() {
   .addItem('Revise Prior Schedule', 'revisePriorSchedule')
   .addSeparator()
   .addSubMenu(ui.createMenu('Import')
-              .addItem('Pull Preferences from Import Preferences Tab', 'pullFacultyPreferencesFromImportTab')
-              .addItem('Pull Courses and Assignments from Teaching Plan (not implemented)', 'pullCoursesAndAssignmentsFromTeachingPlan'))
+              .addItem('Pull Faculty Preferences from Import Preferences Tab', 'pullFacultyPreferencesFromImportTab')
+              .addItem('Pull Faculty Course Assignments from Teaching Plan (not implemented)', 'pullCoursesAndAssignmentsFromTeachingPlan')
+              .addItem('Pull Academic Affairs Built Courses and Validate', 'pullUniversityBuiltCoursesAndValidate'))
   .addSubMenu(ui.createMenu('Reporting')
     .addItem('Cross-Validate Scheduled Courses with Faculty Course Assignments (not implemented)','crossValidateScheduledCoursesAndFacultyCourseAssignments')
     .addItem('Create Faculty Course Assignment Cost Report (not implemented)', 'createFacultyCourseAssignmentCostReport'))
@@ -76,6 +77,223 @@ var SHEET_NAME_OUTPUT_SHEET = "Schedule Output";
 var SHEET_NAME_PRIOR_SCHEDULE_SHEET = "Prior Schedule";
 var SHEET_NAME_IMPORT_FACULTY_PREFERENCES = "Imported Faculty Prefs";
 var SHEET_NAME_EXPORT_COURSE_BUILDING = "Exported Course Builds";
+var SHEET_NAME_OUTPUT_SHEET_AA = "AA Schedule Output";
+
+// HARD-CODED CONSTANTS
+var OUTPUT_SHEET_INDEX_ROW_COST_OUTPUT = 5;
+var OUTPUT_SHEET_INDEX_COL_COST_OUTPUT = 7;
+var OUTPUT_SHEET_INDEX_ROW_NUMCOURSES_OUTPUT = 7;
+var OUTPUT_SHEET_INDEX_COL_NUMCOURSES_OUTPUT = 7;
+
+function pullUniversityBuiltCoursesAndValidate() {
+  var COLUMN_INDEX_SUBJECT = 5;
+  var COLUMN_INDEX_COURSE_NUMBER = 6;
+  var COLUMN_INDEX_SECTION = 7;
+  var COLUMN_INDEX_CRN_NUMBER = 8;
+  var COLUMN_INDEX_XLST_ID = 9;
+  var COLUMN_INDEX_BILL_HR = 10;    // NOT USED
+  var COLUMN_INDEX_CR = 11;
+  var COLUMN_INDEX_MO = 12;
+  var COLUMN_INDEX_TU = 13;
+  var COLUMN_INDEX_WE = 14;
+  var COLUMN_INDEX_TH = 15;
+  var COLUMN_INDEX_FR = 16;
+  var COLUMN_INDEX_SA = 17;
+  var COLUMN_INDEX_SU = 18;
+  var COLUMN_INDEX_PART_TERM = 19;  // NOT USED
+  var COLUMN_INDEX_BEGINS = 20;
+  var COLUMN_INDEX_ENDS = 21;
+  var COLUMN_INDEX_FIRST_NAME = 22; // NOT USED
+  var COLUMN_INDEX_INSTRCTR = 23;
+  var COLUMN_INDEX_BUILDING = 24;
+  var COLUMN_INDEX_ROOM = 25;  
+  var ROW_INDEX_FIRST_COURSE = 1;
+  var NO_DATA_STRING = '.';
+
+  var schedule = SpreadsheetApp.getActiveSpreadsheet();
+  // Load Time Interval data
+  var time_slot_sheet = schedule.getSheetByName(SHEET_NAME_TIME_SLOTS);
+  var time_interval_datarange = time_slot_sheet.getDataRange();
+  
+  // Load Faculty Course Assignments and Time Interval Preference data
+  var faculty_sheet = schedule.getSheetByName(SHEET_NAME_FACULTY_COURSES_AND_PREFERENCES);
+  var faculty_datarange = faculty_sheet.getDataRange();
+ 
+  // Load Faculty Course Assignments and Time Interval Preference data
+  var faculty_sheet = schedule.getSheetByName(SHEET_NAME_FACULTY_COURSES_AND_PREFERENCES);
+  var faculty_datarange = faculty_sheet.getDataRange();
+
+  // Load AA course data 
+  var aa_course_spreadsheet = SpreadsheetApp.openById('1a-z3_fURib15mTKc_iJ0g68u6CAqqIh2cd8PUqq1-7E');//("202010.09.17.19");
+  var aa_course_sheet = aa_course_spreadsheet.getSheetByName('Sheet1');
+  
+  var template_output_sheet = schedule.getSheetByName(SHEET_NAME_OUTPUT_TEMPLATE);
+  var output_sheet_aa = schedule.getSheetByName(SHEET_NAME_OUTPUT_SHEET_AA);
+
+  if (!time_slot_sheet || !faculty_sheet || !output_sheet_aa || !aa_course_sheet) {
+    SpreadsheetApp.getUi().alert('Could not read sheet data.');  
+    throw Error( "Exiting due to sheet data access error." );
+  }
+  
+  // Copy template sheet to output sheet  
+  var template_data_range = template_output_sheet.getDataRange().getDataRegion();
+  var template_data_values = template_data_range.getValues();
+  template_data_range.copyFormatToRange(output_sheet_aa, template_data_range.getColumn(), 
+    template_data_range.getColumn()+template_data_range.getWidth(),
+    template_data_range.getRow(), template_data_range.getRow()+template_data_range.getHeight());
+  template_data_range.copyValuesToRange(output_sheet_aa, template_data_range.getColumn(), 
+    template_data_range.getColumn()+template_data_range.getWidth(),
+    template_data_range.getRow(), template_data_range.getRow()+template_data_range.getHeight());
+  
+  var output_sheet_data = output_sheet_aa.getDataRange();
+  var timeIntervalList = getTimeIntervalsToSchedule(time_interval_datarange);
+  var facultyCoursesAndPrefsList = getFacultyCoursesAndPreferencesToSchedule(faculty_datarange, timeIntervalList);
+
+  // Get full range of data
+  var aa_data_range = aa_course_sheet.getDataRange();
+  // get the data values in range
+  var aa_course_data = aa_data_range.getValues();
+
+  var scheduledCourseList = [];
+  var daysArr = ['M','T','W','R','F','S','U'];
+  var tmp_course_time = new CourseTime('8:00 AM', '8:50 AM', 'M/W/F', 3, [], [], 0);
+  for (var courseIdx = ROW_INDEX_FIRST_COURSE; courseIdx < aa_course_data.length; courseIdx++) {
+    if (aa_course_data[courseIdx][COLUMN_INDEX_SUBJECT] == 'ECGR' || //false) { // ECGR course or ENGR course with section number starting with 'E'
+        (aa_course_data[courseIdx][COLUMN_INDEX_SUBJECT] == 'ENGR' && aa_course_data[courseIdx][COLUMN_INDEX_SECTION].toString().substring(0,1) == 'E')) {
+      var courseLogMsg = 'Reading row ' + (courseIdx+1) + ' : ' + aa_course_data[courseIdx][COLUMN_INDEX_SUBJECT] + ' ' + 
+        aa_course_data[courseIdx][COLUMN_INDEX_COURSE_NUMBER] + '-' + aa_course_data[courseIdx][COLUMN_INDEX_SECTION];
+      Logger.log(courseLogMsg);
+      var aa_builtcourse = aa_course_data[courseIdx];
+      var daysList = [];
+      try {
+        for (var daysColIdx = 0; daysColIdx <=  6; daysColIdx++) {
+          if  (aa_builtcourse[COLUMN_INDEX_MO + daysColIdx] == daysArr[daysColIdx]) {
+            daysList.push(daysArr[daysColIdx]);
+          }
+        }
+      } catch (e) {
+        // Logs an ERROR message.
+        Logger.log('Error Parsing days data: ' + e);
+        continue;
+      }
+      
+      try {
+        var course_time = new CourseTime(tmp_course_time.timeStringToDate(aa_builtcourse[COLUMN_INDEX_BEGINS], '24hr'),
+                                         tmp_course_time.timeStringToDate(aa_builtcourse[COLUMN_INDEX_ENDS], '24hr'), 
+                                         daysList.join('/'),
+                                         aa_builtcourse[COLUMN_INDEX_CR] / daysList.length,
+                                         [], [], 0);
+      } catch (e) {
+        // Logs an ERROR message.
+        Logger.log('Error Parsing creating course time object: ' + e);
+        continue;
+      } 
+      try {      
+        var room = parseRoomListElement(aa_builtcourse[COLUMN_INDEX_BUILDING]);
+        if (aa_builtcourse[COLUMN_INDEX_ROOM] != room.number) {
+          Logger.log('Error room number ' + aa_builtcourse[COLUMN_INDEX_ROOM] + ' and number component of building ' + aa_builtcourse[COLUMN_INDEX_BUILDING] + ' disagree.');
+        }
+      } catch (e) {
+        // Logs an ERROR message.
+        Logger.log('Error Parsing creating room object: ' + e);
+        continue;
+      } 
+      
+      try {
+        var aaScheduledCourse = new Course(aa_builtcourse[COLUMN_INDEX_SUBJECT], 
+                                           aa_builtcourse[COLUMN_INDEX_COURSE_NUMBER],
+                                           aa_builtcourse[COLUMN_INDEX_SECTION].replace('00',''),
+                                           aa_builtcourse[COLUMN_INDEX_CRN_NUMBER],
+                                           course_time.days.length * course_time.credit_hours_per_day);
+        
+      } catch (e) {
+        // Logs an ERROR message.
+        Logger.log('Error Parsing creating course object: ' + e);
+        continue;
+      } 
+      
+      var roomWithTimeInterval = new RoomWithTimeInterval(room, course_time);
+      //var teacherForThisCourse = undefined;
+      var teacherForThisCourse = new FacultyCoursesAndPrefs(aa_builtcourse[COLUMN_INDEX_FIRST_NAME] + ' ' + aa_builtcourse[COLUMN_INDEX_INSTRCTR]);
+      // DEBUG CODE
+      //if (aa_builtcourse[COLUMN_INDEX_INSTRCTR] == 'Junior') {
+      //  var aa = 1;
+      //}
+      var newScheduledCourse = new ScheduledCourse(aaScheduledCourse, room, course_time, 0, teacherForThisCourse, []);
+      newScheduledCourse.cross_list_id = (aa_builtcourse[COLUMN_INDEX_XLST_ID] == NO_DATA_STRING) ? undefined : aa_builtcourse[COLUMN_INDEX_XLST_ID];
+      scheduledCourseList.push(newScheduledCourse);
+    }
+  }
+  
+  // search all course pairs for courses in the same time slots these should be only cross-listed courses
+  for (var courseAIdx = 0; courseAIdx < scheduledCourseList.length; courseAIdx++) {
+    var aaScheduledCourseA = scheduledCourseList[courseAIdx];
+    for (var courseBIdx = courseAIdx + 1; courseBIdx < scheduledCourseList.length; courseBIdx++) {
+      // merge sections at the same time intervals here
+      var aaScheduledCourseB = scheduledCourseList[courseBIdx];
+      if (aaScheduledCourseA.cross_list_id != undefined && aaScheduledCourseA.cross_list_id == aaScheduledCourseB.cross_list_id &&
+          aaScheduledCourseA.CourseTime.getId() == aaScheduledCourseB.CourseTime.getId() &&
+          aaScheduledCourseA.Room.equals(aaScheduledCourseB.Room)) {
+        Logger.log('Cross Listed ' + aaScheduledCourseA.Course.getId() + ' with ' + aaScheduledCourseB.Course.getId());
+        // merge and delete aaScheduledCourseB from the list
+        aaScheduledCourseA.Course.numbers = aaScheduledCourseA.Course.numbers.concat(aaScheduledCourseB.Course.numbers);
+        if (aaScheduledCourseA.Course.section != aaScheduledCourseB.Course.section) {
+          Logger.log('Merged result ' +  aaScheduledCourseA.Course.numbers.join('/') + ' has different section numbers ' + 
+            aaScheduledCourseA.Course.section + ' != ' + aaScheduledCourseB.Course.section);
+        }
+        scheduledCourseList.splice(courseBIdx, 1);
+        courseBIdx--;
+      }
+    }
+  }
+  
+  for (var courseIdx = 0; courseIdx < scheduledCourseList.length; courseIdx++) {
+    var aaScheduledCourse = scheduledCourseList[courseIdx];
+    // Find the faculty member teaching this course (aaScheduledCourse) store the data in teacherForThisCourse      
+    for (var facultyIdx = 0; teacherForThisCourse == undefined && facultyIdx < facultyCoursesAndPrefsList.length; facultyIdx++) {
+      var faculty = facultyCoursesAndPrefsList[facultyIdx];
+      for (var courseIdx2 = 0; courseIdx2 < faculty.courseList.length; courseIdx2++) {
+        if (aaScheduledCourse.Course.equals(faculty.courseList[courseIdx2])) {
+          if(aaScheduledCourse.section == faculty.courseList[courseIdx2].section) {
+            teacherForThisCourse = faculty;
+            var aaNameArr = aaScheduledCourse.FacultyCoursesAndPrefs.name.split(' ');
+            var eceNameArr = teacherForThisCourse.name.split(' ');
+            if (eceNameArr[aaNameArr.length-1] != aaNameArr[eceNameArr.length-1]) {
+              Logger.log('Instructor last name does not agree AA = ' + aaNameArr[1] + ' ECE = ' + eceNameArr[1]);
+            }
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  var numScheduledCourses = 0;
+  var numErrors = 0;
+  while (scheduledCourseList.length > 0) {
+  
+    // get the next course from the prioritySortedCourseList
+    var aaScheduledCourse = scheduledCourseList[0];
+        
+    Logger.log('ScheduleEngine: Scheduling ' + aaScheduledCourse.Course.getId());
+    
+    try {
+      addCourseToSchedule(output_sheet_data, aaScheduledCourse);
+      numScheduledCourses++;
+    } catch (e) {
+      numErrors++;
+    }
+    // remove course from prioritySortedCourseList
+    scheduledCourseList.splice( scheduledCourseList.indexOf(aaScheduledCourse), 1 );
+    
+    // remove rooms with overlapping time intervals from roomWithTimeIntervalList
+    //removeFromList(availableRoomWithTimeInterval, roomWithTimeIntervalList, hasOverlappingRoomTimes);
+    
+    //output_sheet_data.getCell(OUTPUT_SHEET_INDEX_ROW_COST_OUTPUT, OUTPUT_SHEET_INDEX_COL_COST_OUTPUT).setValue(cost.toFixed(2));    
+    output_sheet_data.getCell(OUTPUT_SHEET_INDEX_ROW_NUMCOURSES_OUTPUT, OUTPUT_SHEET_INDEX_COL_NUMCOURSES_OUTPUT).setValue(numScheduledCourses);
+    Logger.log('ScheduleEngine: Scheduled ' + scheduledCourseList.length + " courses " + scheduledCourseList.length + " courses remain to be scheduled.");    
+  }
+}
 
 function pullCoursesAndAssignmentsFromTeachingPlan() {
 }
@@ -196,7 +414,7 @@ function emailFaculty(functionName) {
     replyToStr = SCHEDULE_MANAGER_EMAIL;
     messagePreLine1 = ['Dear ',undefined,',','\n'];
     messagePreLine2 = ['\n','As a final step to course scheduling for Spring 2020 we are asking faculty to review their data within the current teaching schedule.',
-                         ' The following table indicates the current schedule details for your ' + SEMESTER + ' ' + YEAR + ' course(s):','\n'];
+                         ' The following table indicates the schedule details for your ' + SEMESTER + ' ' + YEAR + ' course(s):','\n'];
     messagePostLine1 = ['\n','Please confirm your schedule by responding to this email as soon as possible or, at latest, by close of business ' + DEADLINE_DATE + '.','\n','\n',
                           'If you have any questions regarding your schedule please contact ' + SCHEDULE_MANAGER + ' (' + SCHEDULE_MANAGER_EMAIL + ') by replying to this email or calling '
                           + SCHEDULE_MANAGER_PHONE_NUMBER + '.','\n'];    
@@ -208,7 +426,7 @@ function emailFaculty(functionName) {
     subjectStr = SEMESTER + ' ' + YEAR + ' Special Topics Course Titles';
     replyToStr = SCHEDULE_MANAGER_EMAIL;
     messagePreLine1 = ['Dear ',undefined,',','\n'];
-    messagePreLine2 = ['\n','The current schedule indicates that you will be teaching one or more special topics courses in ' + SEMESTER + ' ' + YEAR + '.',
+    messagePreLine2 = ['\n','The schedule indicates that you will be teaching one or more special topics courses in ' + SEMESTER + ' ' + YEAR + '.',
                       ' The scheduling system requires a title for each special topics course to add these courses to the schedule.',
                       ' The following table indicates the schedule details for your ' + SEMESTER + ' ' + YEAR + ' special topics course(s):','\n'];
     messagePostLine1 = ['\n','Please respond to this email indicating a final title for your special topics courses as soon as possible or, at latest, by close of business ' + DEADLINE_DATE + '.','\n','\n',
@@ -293,7 +511,7 @@ function emailFaculty(functionName) {
         mgmtMessage += logLine + '\n' +  functionName + ': ' + messageSchedule.join('     ');
         Logger.log(logLine);        
         // UNCOMMENT THE LINE BELOW TO SEND OUT EMAILS
-        //MailApp.sendEmail(dstEmailAddress, replyToStr, subjectStr, mailMessage);
+        MailApp.sendEmail(dstEmailAddress, replyToStr, subjectStr, mailMessage);
       }
     } else {
       scheduledCourseList.splice( scheduledCourseList.indexOf(scheduledCourse), 1);      
@@ -468,7 +686,8 @@ Course.prototype.equals = function(other_course) {
 
 // boolean to detect special topics courses
 Course.prototype.isSpecialTopics = function() {
-  return this.getId().indexOf('090') >= 0;
+  return /[3.4.5,6,8]090/.test(this.getId());
+  //return this.getId().indexOf('090') >= 0;
 }
 
 // Course::notSimultaneousConflict()
@@ -476,7 +695,7 @@ Course.prototype.isSpecialTopics = function() {
 Course.prototype.notSimultaneousConflict = function(course_to_check) {
   var conflict = false;
   for (var notSimultaneousIdx = 0; conflict == false && notSimultaneousIdx < this.not_simultaneous_courses.length; notSimultaneousIdx++) {
-    // do a regex pattern match here. For example, 3159's conflicts 3???, 4???? indicate any 3XXX, 4XXX course is a conflict
+    // do a regex pattern match here. For example, 3159's conflicts are 3???, 4???? indicating any 3XXX, 4XXX course is a conflict
     if (this.not_simultaneous_courses[notSimultaneousIdx].numbers[0].indexOf('?') >= 0) {
       var regexp_str = this.not_simultaneous_courses[notSimultaneousIdx].numbers[0].replace(/\?/g,'[0-9]?');
       var regexp = new RegExp(regexp_str);
@@ -546,6 +765,10 @@ CourseTime.prototype.getId = function() {
   return start_time_str + '-' + end_time_str + ' ' + days_str;
 }
 
+CourseTime.prototype.durationMinutes = function() {
+  return (this.end - this.start)/ (1000 * 60);
+}
+
 // CourseTime::equals() function
 CourseTime.prototype.equals = function(other_course_time) {
   // exact equality of start and end times
@@ -593,24 +816,36 @@ var DATE_CONSTANT_MSEC = 00;
 
 // CourseTime::getTimeString
 // Creates a time string for a time interval
-CourseTime.prototype.timeStringToDate = function(timeString) {
+CourseTime.prototype.timeStringToDate = function(timeString, format) {
+  timeString = timeString.toString();
   // replace '/' with '-'
   timeString = timeString.replace(/\//ig, '-');
-  
-  /**
-  * extracting the year, month, day, hours and minutes.
-  * the month, day and hours can be 1 or 2 digits(the leading zero is optional).
-  * i.e: '4/3/2022 2:18 AM' is the same as '04/03/2022 02:18 AM' => Notice the absence of the leading zero.
-  **/
-  var //y = /\-([\d]{4})/.exec(timeString)[1],
-      //m = /\-([\d]{2}|[\d])/.exec(timeString)[1],
-      //d = /([\d]{2}|[\d])\-/.exec(timeString)[1],
-      //H = /\s([\d]{2}|[\d]):/.exec(timeString)[1],
-      H = /([\d]{2}|[\d]):/.exec(timeString)[1],
-      i = /:([\d]{2})/.exec(timeString)[1],
-      AMorPM = /(AM|PM)/.exec(timeString)[1];
-  if (AMorPM == "PM" && H != 12) {
-    H +=12;
+  // delete '.'
+  timeString = timeString.replace(/\./g, '');
+  if (timeString.length < 1) {
+    return new Date(DATE_CONSTANT_YEAR, DATE_CONSTANT_MONTH, DATE_CONSTANT_DAY, 0, 0, DATE_CONSTANT_SEC, DATE_CONSTANT_MSEC);
+  }
+  var H, i, AMorPM;
+  if (format != undefined && format == '24hr') {
+    var hrmin = /([\d]{4}|[\d]{3})/.exec(timeString)[1];
+    H = hrmin.substring(0,hrmin.length-2);
+    i = hrmin.substring(hrmin.length-2,hrmin.length);
+  } else {
+    /**
+    * extracting the year, month, day, hours and minutes.
+    * the month, day and hours can be 1 or 2 digits(the leading zero is optional).
+    * i.e: '4/3/2022 2:18 AM' is the same as '04/03/2022 02:18 AM' => Notice the absence of the leading zero.
+    **/
+    //var y = /\-([\d]{4})/.exec(timeString)[1],
+    //m = /\-([\d]{2}|[\d])/.exec(timeString)[1],
+    //d = /([\d]{2}|[\d])\-/.exec(timeString)[1],
+    //H = /\s([\d]{2}|[\d]):/.exec(timeString)[1],
+    H = /([\d]{2}|[\d]):/.exec(timeString)[1],
+        i = /:([\d]{2})/.exec(timeString)[1],
+        AMorPM = /(AM|PM)/.exec(timeString)[1];
+    if (AMorPM == "PM" && H != 12) {
+      H +=12;
+    }
   }
   // return a Date instance.
   //return new Date(y,m,d,H,i,00,00);
@@ -712,19 +947,15 @@ ScheduledCourse.prototype.getId = function() {
   return this.Course.getId() + ' in ' + this.Room.getId() + ' at ' + this.CourseTime.getId() + ' instructed by ' + facultyName;
 }
 
-// HARD-CODED CONSTANTS
-var OUTPUT_SHEET_INDEX_ROW_COST_OUTPUT = 5;
-var OUTPUT_SHEET_INDEX_COL_COST_OUTPUT = 7;
-var OUTPUT_SHEET_INDEX_ROW_NUMCOURSES_OUTPUT = 7;
-var OUTPUT_SHEET_INDEX_COL_NUMCOURSES_OUTPUT = 7;
-
 function computeNewSchedule() {
-  SpreadsheetApp.getUi().alert('This function is disabled since the schedule has been distributed.');  
+  SpreadsheetApp.getUi().alert('This function is disabled since the final schedule has been distributed to faculty.');  
   return;
   RunSchedulingEngine(false);
 }
 
 function revisePriorSchedule() {
+  SpreadsheetApp.getUi().alert('This function is disabled since the final revised schedule has been exported for entry to the registrar.');  
+  return;
   RunSchedulingEngine(true);
 }
 
@@ -1371,14 +1602,19 @@ function parseCommaSeparatedArray(str, filter) {
 function parseRoomListElement(str) {
   // HARD-CODED CONSTANTS
   var DEFAULT_BUILDING = "EPIC";
-
-  var building = /[A-Z]{4}/.exec(str); // 4 capital letters,, if null assume DEFAULT_BUILDING
-  if (building == null) {
+  // remove spaces in the string
+  //str = str.replace(/\s/g, '');
+  //var building = /[A-Z]{4}/.exec(str); // 4 capital letters,, if null assume DEFAULT_BUILDING
+  str = str.split(' ');
+  var building = (str.length == 1) ? undefined : str[0];
+  var number = (str.length == 1) ? str[0] : str[1];
+  if (building == undefined) {
     building = DEFAULT_BUILDING;
-  } else {
-    building = building[0];
-  }
-  var number = /[0-9]{4}/.exec(str)[0]; // return 1st match of 4 digits (required)
+  }// else {
+   // building = building[0];
+  //}
+  //var number = str.substring(4,str.length);
+  //var number = /[0-9]{4}/.exec(str)[0]; // return 1st match of 4 digits (required)
   return new Room(building, number);
 }
 
@@ -1924,8 +2160,12 @@ function addCourseToSchedule(output_sheet_data, newScheduledCourse) {
   // convert the U,M,T,W,R,F,S day strings to output sheet column indices 
   var days_of_week_colIdxs = convertDaysOfWeekToSlotColumnIndices(newScheduledCourse.CourseTime.days);
   var rooms_colIdxs = convertDaysOfWeekToRoomColumnIndices(newScheduledCourse.CourseTime.days);
+  if (newScheduledCourse.CourseTime.durationMinutes() < 5) {
+    Logger.log('Error: Cannot add course ' + newScheduledCourse.Course.getId() + ' to the schedule at time ' + newScheduledCourse.CourseTime.getId() + ' it is shorter than 5 minutes in length.');
+    return;
+  }
   var timeinterval_rowRange = convertTimeIntervalToRowRange(newScheduledCourse.CourseTime.start, newScheduledCourse.CourseTime.end);
-  timeinterval_rowRange[1] += 2; // two slots for the 10 minute between class periods on output sheet before next time interval
+  timeinterval_rowRange[1] += 2; // two slots for the 10 minutes between class periods on output sheet before next time interval
   var output_cost_column_index = OUTPUT_SHEET_COST_INDEX_COLUMN_OFFSET;
   var hoursScheduled = 0;
   var roomRowIdxs = [];
@@ -1938,8 +2178,9 @@ function addCourseToSchedule(output_sheet_data, newScheduledCourse) {
                                             timeinterval_rowRange[0] + OUTPUT_SHEET_ROOM_INDEX_ROW_OFFSET, timeinterval_rowRange[1] + OUTPUT_SHEET_ROOM_INDEX_ROW_OFFSET);
     }
     for (var slotRowIdx = 0; slotRowIdx < roomRowIdxs.length; slotRowIdx++) {
+      var facultyNameList = newScheduledCourse.FacultyCoursesAndPrefs.name.split(" ");
       var slotString = newScheduledCourse.Course.getId() + 
-          ((newScheduledCourse.FacultyCoursesAndPrefs != undefined) ? (" " + newScheduledCourse.FacultyCoursesAndPrefs.name.split(" ")[1] + " " + newScheduledCourse.costArray['faculty_time']) : "");
+          ((newScheduledCourse.FacultyCoursesAndPrefs != undefined) ? (" " + facultyNameList[facultyNameList.length-1] + " " + newScheduledCourse.costArray['faculty_time']) : "");
       if (slotRowIdx > 0) {
         slotString = '*' + slotString;
       }
@@ -1954,6 +2195,8 @@ function addCourseToSchedule(output_sheet_data, newScheduledCourse) {
     } else {
       output_sheet_data.getCell(roomRowIdxs[0], output_cost_column_index).setValue(newScheduledCourse.cost.toFixed(2));
     }
+  } else {
+    Logger.log('Error: Could not add ' + newScheduledCourse.Course.getId() + ' to the schedule in room ' + newScheduledCourse.Room.getId() + ' at time ' + newScheduledCourse.CourseTime.getId() + '.');
   }
 }
 
@@ -1965,7 +2208,7 @@ function findRoomRowsInOutputSheet(output_sheet_data, room_id, columnIdx, start_
     var cellValue = output_sheet_data.getCell(qrowIdx, columnIdx).getValue();
     if (cellValue === room_id) { // careful for whitespace!
       roomRowIdxs.push(qrowIdx);
-    }    
+    }
   }
   return roomRowIdxs;
 }
