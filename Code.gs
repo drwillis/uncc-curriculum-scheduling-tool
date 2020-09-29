@@ -1,7 +1,7 @@
 // 
 // This file is part of the UNCC ECE Scheduling Software and distributed 
 // as a Google script embedded as part of a Google Sheets Spreadsheet
-// Copyright (c) 2019 Andrew Willis, All rights reserved.
+// Copyright (c) 2019, 2020 Andrew Willis, All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -26,7 +26,8 @@
 //
 // The ECE Course Scheduling Engine
 // Andrew Willis
-// June 15, 2019
+//      June 15, 2019
+// September 29, 2020
 
 /////////// KNOWN SHORTCOMINGS ///////////
 // NO SEARCH YET, i.e., GREEDY OPTIMIZATION, ASSIGNMENTS ARE SEQUENTIAL WITH NO BACKTRACKING
@@ -67,6 +68,7 @@ function onOpen() {
   .addToUi();
 }
 
+var SHEET_NAME_CONFIGURATION = "Config";
 var SHEET_NAME_COURSE_CONSTRAINTS = "Courses";
 var SHEET_NAME_TIME_SLOTS = "Time Intervals";
 var SHEET_NAME_FACULTY_COURSES_AND_PREFERENCES = "Faculty Prefs & Courses";
@@ -74,11 +76,14 @@ var SHEET_NAME_ROOM_SLOTS = "Rooms";
 var SHEET_NAME_COURSE_AND_TIME_CONSTRAINTS = "Pre-Scheduled Courses";
 var SHEET_NAME_OUTPUT_TEMPLATE = "Template";
 var SHEET_NAME_OUTPUT_SHEET = "Schedule Output";
+var SHEET_NAME_OUTPUT_SHEET_TEST = "Schedule Output 2";
 var SHEET_NAME_PRIOR_SCHEDULE_SHEET = "Prior Schedule";
 var SHEET_NAME_IMPORT_FACULTY_PREFERENCES = "Imported Faculty Prefs";
 var SHEET_NAME_EXPORT_COURSE_BUILDING = "Exported Course Builds";
 var SHEET_NAME_OUTPUT_SHEET_AA = "AA Schedule Output";
 var SHEET_NAME_OUTPUT_SHEET_BANNER = "Banner Schedule Output";
+
+var DEFAULT_DEPT_CODE = "ECGR";
 
 // HARD-CODED CONSTANTS
 var OUTPUT_SHEET_INDEX_ROW_COST_OUTPUT = 5;
@@ -86,7 +91,39 @@ var OUTPUT_SHEET_INDEX_COL_COST_OUTPUT = 7;
 var OUTPUT_SHEET_INDEX_ROW_NUMCOURSES_OUTPUT = 7;
 var OUTPUT_SHEET_INDEX_COL_NUMCOURSES_OUTPUT = 7;
 
+var defaultScheduleRenderer = null;
+
+function testBannerLogin() {
+  if (false) {
+  var options =
+   {
+     "method" : "post",
+     "payload" : payload,
+     "followRedirects" : false
+   };
+  var headers = {
+    'Connection':'keep-alive',
+    'Content-Type':'application/json;charset=utf-8',
+    'Accept':'application/json, text/plain, */*',
+    'Cookie':'...',
+  }
+  var login = UrlFetchApp.fetch("https://webauth.uncc.edu/idp/profile/SAML2/Redirect/SSO?execution=e3s1" , options);
+  var sessionDetails = login.getAllHeaders()['Set-Cookie'];
+  var downloadPayload = 
+      {
+        "__EVENTTARGET" : 'ctl00$ActionsPlaceHolder$exportDownloadLink1', 
+      };// This is just an example it may or may not be needed, if needed u need to trace the values from the developer tools.
+  }
+  var payload =
+   {
+     "sel_subj" : DEFAULT_DEPT_CODE,
+   };
+  var downloadCsv = UrlFetchApp.fetch("https://selfservice.uncc.edu/pls/BANPROD/bwckgens.p_proc_term_date");
+  Logger.log(downloadCsv.getContentText())
+}
+
 function pullUniversityBuiltCoursesAndValidate() {
+/* Reports from AA - Monique Wilson has this format
   var COLUMN_INDEX_SUBJECT = 5;
   var COLUMN_INDEX_COURSE_NUMBER = 6;
   var COLUMN_INDEX_SECTION = 7;
@@ -109,6 +146,30 @@ function pullUniversityBuiltCoursesAndValidate() {
   var COLUMN_INDEX_BUILDING = 24;
   var COLUMN_INDEX_ROOM = 25;  
   var ROW_INDEX_FIRST_COURSE = 1;
+  */
+  // Reports from AA - Nickcoy Findlater has this format
+  var COLUMN_INDEX_SUBJECT = 2;
+  var COLUMN_INDEX_COURSE_NUMBER = 3;
+  var COLUMN_INDEX_SECTION = 4;
+  var COLUMN_INDEX_CRN_NUMBER = 5;
+  var COLUMN_INDEX_XLST_ID = 6;
+  var COLUMN_INDEX_BILL_HR = 7;    // NOT USED
+  var COLUMN_INDEX_CR = 8;
+  var COLUMN_INDEX_MO = 9;
+  var COLUMN_INDEX_TU = 10;
+  var COLUMN_INDEX_WE = 11;
+  var COLUMN_INDEX_TH = 12;
+  var COLUMN_INDEX_FR = 13;
+  var COLUMN_INDEX_SA = 14;
+  var COLUMN_INDEX_SU = 15;
+  var COLUMN_INDEX_SESSION = 16;  // NOT USED
+  var COLUMN_INDEX_BEGINS = 17;
+  var COLUMN_INDEX_ENDS = 18;
+  var COLUMN_INDEX_FIRST_NAME = 19; // NOT USED
+  var COLUMN_INDEX_INSTRCTR = 20;
+  var COLUMN_INDEX_BUILDING = 21;
+  var COLUMN_INDEX_ROOM = 22;  
+  var ROW_INDEX_FIRST_COURSE = 1;
   var NO_DATA_STRING = '.';
 
   var schedule = SpreadsheetApp.getActiveSpreadsheet();
@@ -125,12 +186,15 @@ function pullUniversityBuiltCoursesAndValidate() {
   var faculty_datarange = faculty_sheet.getDataRange();
 
   // Load AA course data 
-  var aa_course_spreadsheet = SpreadsheetApp.openById('1a-z3_fURib15mTKc_iJ0g68u6CAqqIh2cd8PUqq1-7E');//("202010.09.17.19");
+  // 1fUfalSYLBQO5iBr0LJMMPx0k3hlet7xBaI0lIjOIuws
+  //var aa_course_spreadsheet = SpreadsheetApp.openById('1a-z3_fURib15mTKc_iJ0g68u6CAqqIh2cd8PUqq1-7E');//("202010.09.17.19");
+  //var aa_course_spreadsheet = SpreadsheetApp.openById('1k6zzPr3rzWSdoQ0z8y2ZpcqJEjOYCTZAGNHwRR1Xo88');//("2-10-2020");
+  var aa_course_spreadsheet = SpreadsheetApp.openById('1B7a7X7w7HSicycuinwKFwv7bi4nyCMQsHpMwTKNr70k');//("2-10-2020");
   var aa_course_sheet = aa_course_spreadsheet.getSheetByName('Sheet1');
   
   var template_output_sheet = schedule.getSheetByName(SHEET_NAME_OUTPUT_TEMPLATE);
   var output_sheet_aa = schedule.getSheetByName(SHEET_NAME_OUTPUT_SHEET_AA);
-
+  
   if (!time_slot_sheet || !faculty_sheet || !output_sheet_aa || !aa_course_sheet) {
     SpreadsheetApp.getUi().alert('Could not read sheet data.');  
     throw Error( "Exiting due to sheet data access error." );
@@ -159,7 +223,7 @@ function pullUniversityBuiltCoursesAndValidate() {
   var daysArr = ['M','T','W','R','F','S','U'];
   var tmp_course_time = new CourseTime('8:00 AM', '8:50 AM', 'M/W/F', 3, [], [], 0);
   for (var courseIdx = ROW_INDEX_FIRST_COURSE; courseIdx < aa_course_data.length; courseIdx++) {
-    if (aa_course_data[courseIdx][COLUMN_INDEX_SUBJECT] == 'ECGR' || //false) { // ECGR course or ENGR course with section number starting with 'E'
+    if (aa_course_data[courseIdx][COLUMN_INDEX_SUBJECT] == DEFAULT_DEPT_CODE || //false) { // ECGR course or ENGR course with section number starting with 'E'
         (aa_course_data[courseIdx][COLUMN_INDEX_SUBJECT] == 'ENGR' && aa_course_data[courseIdx][COLUMN_INDEX_SECTION].toString().substring(0,1) == 'E')) {
       var courseLogMsg = 'Reading row ' + (courseIdx+1) + ' : ' + aa_course_data[courseIdx][COLUMN_INDEX_SUBJECT] + ' ' + 
         aa_course_data[courseIdx][COLUMN_INDEX_COURSE_NUMBER] + '-' + aa_course_data[courseIdx][COLUMN_INDEX_SECTION];
@@ -190,8 +254,9 @@ function pullUniversityBuiltCoursesAndValidate() {
         continue;
       } 
       try {      
-        var room = parseRoomListElement(aa_builtcourse[COLUMN_INDEX_BUILDING]);
-        if (aa_builtcourse[COLUMN_INDEX_ROOM] != room.number) {
+        //var room = parseRoomListElement(aa_builtcourse[COLUMN_INDEX_BUILDING] + ' ' + aa_builtcourse[COLUMN_INDEX_ROOM]);
+        var room = parseRoomListElement(aa_builtcourse[COLUMN_INDEX_BUILDING] + ' ' + aa_builtcourse[COLUMN_INDEX_ROOM]);
+        if (aa_builtcourse[COLUMNtimeStringToDate_INDEX_ROOM] != room.number) {
           Logger.log('Error room number ' + aa_builtcourse[COLUMN_INDEX_ROOM] + ' and number component of building ' + aa_builtcourse[COLUMN_INDEX_BUILDING] + ' disagree.');
         }
       } catch (e) {
@@ -254,8 +319,9 @@ function pullUniversityBuiltCoursesAndValidate() {
     for (var facultyIdx = 0; teacherForThisCourse == undefined && facultyIdx < facultyCoursesAndPrefsList.length; facultyIdx++) {
       var faculty = facultyCoursesAndPrefsList[facultyIdx];
       for (var courseIdx2 = 0; courseIdx2 < faculty.courseList.length; courseIdx2++) {
-        if (aaScheduledCourse.Course.equals(faculty.courseList[courseIdx2])) {
-          if(aaScheduledCourse.section == faculty.courseList[courseIdx2].section) {
+        if (aaScheduledCourse.Course.sameNumber(faculty.courseList[courseIdx2])) {
+          if(aaScheduledCourse.Course.sameSection(faculty.courseList[courseIdx2])) {
+          //if(aaScheduledCourse.section == faculty.courseList[courseIdx2].section) {
             teacherForThisCourse = faculty;
             var aaNameArr = aaScheduledCourse.FacultyCoursesAndPrefs.name.split(' ');
             var eceNameArr = teacherForThisCourse.name.split(' ');
@@ -365,10 +431,20 @@ function pullBannerCoursesAndValidate() {
   // get the data values in range
   var banner_course_data = banner_data_range.getValues();
 
+  for (var courseIdx = ROW_INDEX_FIRST_COURSE; courseIdx < banner_course_data.length; courseIdx++) {
+    if (courseIdx > ROW_INDEX_FIRST_COURSE && banner_course_data[courseIdx][COLUMN_INDEX_SUBJECT] == '' && banner_course_data[courseIdx][COLUMN_INDEX_COURSE_NUMBER] == '') {
+      for (var columnIdx = 0; columnIdx < banner_course_data[courseIdx].length; columnIdx++) {
+        if (banner_course_data[courseIdx][columnIdx]== '') {
+          banner_course_data[courseIdx][columnIdx] = banner_course_data[courseIdx-1][columnIdx];
+        }
+      }
+    }
+  }
+
   var scheduledCourseList = [];
   var tmp_course_time = new CourseTime('8:00 AM', '8:50 AM', 'M/W/F', 3, [], [], 0);
   for (var courseIdx = ROW_INDEX_FIRST_COURSE; courseIdx < banner_course_data.length; courseIdx++) {
-    if (banner_course_data[courseIdx][COLUMN_INDEX_SUBJECT] == 'ECGR' || //false) { // ECGR course or ENGR course with section number starting with 'E'
+    if (banner_course_data[courseIdx][COLUMN_INDEX_SUBJECT] == DEFAULT_DEPT_CODE || //false) { // ECGR course or ENGR course with section number starting with 'E'
         (banner_course_data[courseIdx][COLUMN_INDEX_SUBJECT] == 'ENGR' && banner_course_data[courseIdx][COLUMN_INDEX_SECTION].toString().substring(0,1) == 'E')) {
       var courseLogMsg = 'Reading row ' + (courseIdx+1) + ' : ' + banner_course_data[courseIdx][COLUMN_INDEX_SUBJECT] + ' ' + 
         banner_course_data[courseIdx][COLUMN_INDEX_COURSE_NUMBER] + '-' + banner_course_data[courseIdx][COLUMN_INDEX_SECTION];
@@ -392,6 +468,7 @@ function pullBannerCoursesAndValidate() {
         continue;
       } 
       try {      
+        //var room = parseRoomListElement(banner_builtcourse[COLUMN_INDEX_LOCATION]);
         var room = parseRoomListElement(banner_builtcourse[COLUMN_INDEX_LOCATION]);
         //if (banner_builtcourse[COLUMN_INDEX_ROOM] != room.number) {
         //  Logger.log('Error room number ' + banner_builtcourse[COLUMN_INDEX_ROOM] + ' and number component of building ' + banner_builtcourse[COLUMN_INDEX_BUILDING] + ' disagree.');
@@ -456,8 +533,9 @@ function pullBannerCoursesAndValidate() {
     for (var facultyIdx = 0; teacherForThisCourse == undefined && facultyIdx < facultyCoursesAndPrefsList.length; facultyIdx++) {
       var faculty = facultyCoursesAndPrefsList[facultyIdx];
       for (var courseIdx2 = 0; courseIdx2 < faculty.courseList.length; courseIdx2++) {
-        if (aaScheduledCourse.Course.equals(faculty.courseList[courseIdx2])) {
-          if(aaScheduledCourse.section == faculty.courseList[courseIdx2].section) {
+        if (aaScheduledCourse.Course.sameNumber(faculty.courseList[courseIdx2])) {
+          if (aaScheduledCourse.Course.sameSection(faculty.courseList[courseIdx2])) {
+          //if(aaScheduledCourse.section == faculty.courseList[courseIdx2].section) {
             teacherForThisCourse = faculty;
             var aaNameArr = aaScheduledCourse.FacultyCoursesAndPrefs.name.split(' ');
             var eceNameArr = teacherForThisCourse.name.split(' ');
@@ -596,15 +674,16 @@ function emailFaculty(functionName) {
   transferScheduledCourses('READ', prior_schedule_sheet, scheduledCourseList, facultyCoursesAndPrefsList);
 
   // emails will not be sent to email addresses in the exemptEmail array
-  var exemptEmail = ['nbousaba@uncc.edu','brodri17@uncc.edu'];
+  //var exemptEmail = ['nbousaba@uncc.edu','brodri17@uncc.edu'];
+  var exemptEmail = [];
   
-  // Form letter email constants that change each semester / year
-  var SEMESTER = 'Spring'
-  var YEAR = '2020';
-  var SCHEDULE_MANAGER = 'Jim Conrad';
-  var SCHEDULE_MANAGER_EMAIL = 'jmconrad@uncc.edu';
-  var SCHEDULE_MANAGER_PHONE_NUMBER = '704-687-8597';
-  var DEADLINE_DATE = 'Wednesday, September 4';
+  // Form letter email constants that change each semester / year  
+  var config_sheet = schedule.getSheetByName(SHEET_NAME_CONFIGURATION);
+  var SEMESTER = config_sheet.getRange(8,3,1,1).getValue();
+  var YEAR = config_sheet.getRange(9,3,1,1).getValue();
+  var SCHEDULE_MANAGER = config_sheet.getRange(10,3,1,1).getValue();
+  var SCHEDULE_MANAGER_EMAIL = config_sheet.getRange(11,3,1,1).getValue();
+  var SCHEDULE_MANAGER_PHONE_NUMBER = config_sheet.getRange(12,3,1,1).getValue();
 
   // construct and send out emails
   var subjectStr;
@@ -614,19 +693,21 @@ function emailFaculty(functionName) {
   var messagePostLine1
   var mgmtMessage = "Log for emailFaculty " + functionName + ":\n";
   if (functionName == 'teaching_schedule') {
-    subjectStr = SEMESTER + ' ' + YEAR + ' Course Teaching Schedule';
+    var DEADLINE_DATE = config_sheet.getRange(17,3,1,1).getValue();
+    subjectStr = SEMESTER + ' ' + YEAR + ' Course Teaching Schedule (PLEASE REPLY)';
     replyToStr = SCHEDULE_MANAGER_EMAIL;
     messagePreLine1 = ['Dear ',undefined,',','\n'];
-    messagePreLine2 = ['\n','As a final step to course scheduling for Spring 2020 we are asking faculty to review their data within the current teaching schedule.',
+    messagePreLine2 = ['\n','As a final step to course scheduling for ' + SEMESTER + ' ' + YEAR + ' we are asking faculty to review their data within the current teaching schedule.',
                          ' The following table indicates the schedule details for your ' + SEMESTER + ' ' + YEAR + ' course(s):','\n'];
     messagePostLine1 = ['\n','Please confirm your schedule by responding to this email as soon as possible or, at latest, by close of business ' + DEADLINE_DATE + '.','\n','\n',
                           'If you have any questions regarding your schedule please contact ' + SCHEDULE_MANAGER + ' (' + SCHEDULE_MANAGER_EMAIL + ') by replying to this email or calling '
                           + SCHEDULE_MANAGER_PHONE_NUMBER + '.','\n'];    
   } else if (functionName == 'special_topics_course_titles') {
-    SCHEDULE_MANAGER = 'Andrew Willis';
-    SCHEDULE_MANAGER_EMAIL = 'arwillis@uncc.edu';
-    SCHEDULE_MANAGER_PHONE_NUMBER = '704-687-8420';
-    DEADLINE_DATE = 'Saturday, September 7';
+    var DEADLINE_DATE = config_sheet.getRange(20,3,1,1).getValue();
+    //SCHEDULE_MANAGER = 'Andrew Willis';
+    //SCHEDULE_MANAGER_EMAIL = 'arwillis@uncc.edu';
+    //SCHEDULE_MANAGER_PHONE_NUMBER = '704-687-8420';
+    //DEADLINE_DATE = 'Saturday, September 7';
     subjectStr = SEMESTER + ' ' + YEAR + ' Special Topics Course Titles';
     replyToStr = SCHEDULE_MANAGER_EMAIL;
     messagePreLine1 = ['Dear ',undefined,',','\n'];
@@ -708,14 +789,12 @@ function emailFaculty(functionName) {
                              
       messagePreLine1[1] = faculty.name;
       var mailMessage = messagePreLine1.join('') + messagePreLine2.join('') + messageSchedule.join(' ') + messagePostLine1.join(''); // Second column
-      //if (dstEmailAddress == 'yzhang47@uncc.edu') {
-      if (dstEmailAddress == 'arwillis@uncc.edu') { // || dstEmailAddress == 'jmconrad@uncc.edu') {
-      //dstEmailAddress = 'arwillis@uncc.edu';
+      if (dstEmailAddress == 'XXXXX@uncc.edu') {
         logLine = 'emailFaculty ' + functionName + ': Sent notification to ' + dstEmailAddress + '.';
         mgmtMessage += logLine + '\n' +  functionName + ': ' + messageSchedule.join('     ');
         Logger.log(logLine);        
         // UNCOMMENT THE LINE BELOW TO SEND OUT EMAILS
-        MailApp.sendEmail(dstEmailAddress, replyToStr, subjectStr, mailMessage);
+        //MailApp.sendEmail(dstEmailAddress, replyToStr, subjectStr, mailMessage);
       }
     } else {
       scheduledCourseList.splice( scheduledCourseList.indexOf(scheduledCourse), 1);      
@@ -724,9 +803,7 @@ function emailFaculty(functionName) {
       Logger.log(logLine);        
     }
   }
-  //MailApp.sendEmail(SCHEDULE_MANAGER_EMAIL, 'emailFaculty ' + functionName + ' Logs', mgmtMessage);
-  //MailApp.sendEmail('jmconrad@uncc.edu', 'emailFaculty ' + functionName + ' Logs', mgmtMessage);
-  //MailApp.sendEmail('arwillis@uncc.edu', 'emailFaculty ' + functionName + ' Logs', mgmtMessage);
+  MailApp.sendEmail(SCHEDULE_MANAGER_EMAIL, 'emailFaculty ' + functionName + ' Logs', mgmtMessage);
 }
 
 function isValidEmailAddress(email) {
@@ -793,13 +870,13 @@ function exportToUniversityCourseBuildingFormat() {
       }
       built_course.push("");                                                             // BILLHR
       built_course.push(scheduledRoomWithTimeInterval.Course.credit_hours);              // CR
-      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('M') < 0) ? " " : "X"); // MO
-      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('T') < 0) ? " " : "X"); // TU
-      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('W') < 0) ? " " : "X"); // WE
-      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('R') < 0) ? " " : "X"); // TH
-      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('F') < 0) ? " " : "X"); // FR
-      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('S') < 0) ? " " : "X"); // SA
-      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('U') < 0) ? " " : "X"); // SU
+      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('M') < 0) ? " " : "M"); // MO
+      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('T') < 0) ? " " : "T"); // TU
+      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('W') < 0) ? " " : "W"); // WE
+      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('R') < 0) ? " " : "R"); // TH
+      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('F') < 0) ? " " : "F"); // FR
+      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('S') < 0) ? " " : "S"); // SA
+      built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('U') < 0) ? " " : "U"); // SU
       built_course.push("");                                                             // PART_TERM
       built_course.push(scheduledRoomWithTimeInterval.CourseTime.getTimeString(scheduledRoomWithTimeInterval.CourseTime.start, '24hr'));   // BEGINS
       built_course.push(scheduledRoomWithTimeInterval.CourseTime.getTimeString(scheduledRoomWithTimeInterval.CourseTime.end, '24hr'));     // ENDS
@@ -855,8 +932,8 @@ function showLogs() {
 }
 
 // Course class constructor and supporting functions
-function Course(dept_code, numbers, section, crn, credit_hours, priority, expected_enrollment, not_simultaneous_courses, simultaneous_courses, required_rooms, excluded_rooms) {
-  this.dept_code = dept_code
+function Course(dept_code, numbers, section, crn, credit_hours, priority, expected_enrollment, not_simultaneous_courses, simultaneous_courses, required_rooms, excluded_rooms, instructional_mode) {
+  this.dept_code = dept_code;
   this.numbers = numbers.toString().split("/");
   this.section = section;
   this.crn = crn;
@@ -867,6 +944,7 @@ function Course(dept_code, numbers, section, crn, credit_hours, priority, expect
   this.simultaneous_courses = simultaneous_courses;
   this.required_rooms = required_rooms;
   this.excluded_rooms = excluded_rooms;
+  this.instructional_mode = instructional_mode;
 }
 
 // Course::getId() function
@@ -880,6 +958,11 @@ var COURSE_NUMBER_SPECIAL_TOPICS_GRAD = 6090;
 
 // Course::equals() function
 Course.prototype.equals = function(other_course) {
+  return this.sameNumber(other_course) && this.sameSection(other_course);
+}
+
+// Course::sameNumber() function
+Course.prototype.sameNumber = function(other_course) {
   if (this.numbers[0] == COURSE_NUMBER_SPECIAL_TOPICS_UNDERGRAD || 
       this.numbers[0] == COURSE_NUMBER_SPECIAL_TOPICS_GRAD) {
     return this.dept_code == other_course.dept_code && this.numbers[0] == other_course.numbers[0] && this.section == other_course.section;      
@@ -888,9 +971,21 @@ Course.prototype.equals = function(other_course) {
   }
 }
 
+// Course::sameSection() function
+Course.prototype.sameSection = function(other_course) {
+  // remove leading zeros so sections '1','01', and '001 are equal
+  //if (this.section == '001') {
+  //  var aaa=1;
+  //}
+  var thisSection = (typeof this.section == 'string' || this.section instanceof String) ? this.section.replace(/^0+/, '') : this.section;
+  var otherSection = (typeof other_course.section == 'string' || other_course.section instanceof String) ? other_course.section.replace(/^0+/, '') : other_course.section;
+  return thisSection == otherSection;
+  //return this.section == other_course.section;
+}
+
 // boolean to detect special topics courses
 Course.prototype.isSpecialTopics = function() {
-  return /[3.4.5,6,8]090/.test(this.getId());
+  return /[3,4,5,6,8]090/.test(this.getId());
   //return this.getId().indexOf('090') >= 0;
 }
 
@@ -906,7 +1001,7 @@ Course.prototype.notSimultaneousConflict = function(course_to_check) {
       //var strt = course_to_check.numbers[0].toString();
       conflict = regexp.test(course_to_check.numbers[0]);
     } else {
-      conflict =  this.not_simultaneous_courses[notSimultaneousIdx].equals(course_to_check);
+      conflict =  this.not_simultaneous_courses[notSimultaneousIdx].sameNumber(course_to_check);
     }
   }
   return conflict;
@@ -917,7 +1012,7 @@ Course.prototype.notSimultaneousConflict = function(course_to_check) {
 Course.prototype.simultaneousPreference = function(course_to_check) {
   var simultaneous = false;
   for (var simultaneousIdx = 0; simultaneous == false && simultaneousIdx < this.simultaneous_courses.length; simultaneousIdx++) {  
-    simultaneous = this.simultaneous_courses[simultaneousIdx].equals(course_to_check);
+    simultaneous = this.simultaneous_courses[simultaneousIdx].sameNumber(course_to_check);
   }
   return simultaneous;
 }
@@ -975,7 +1070,7 @@ CourseTime.prototype.durationMinutes = function() {
 
 // CourseTime::equals() function
 CourseTime.prototype.equals = function(other_course_time) {
-  // exact equality of start and end times
+  // exact equality of start and end 
   return this.start - other_course_time.start === 0 && this.end - other_course_time.end === 0;
 }
 
@@ -1153,19 +1248,30 @@ ScheduledCourse.prototype.getId = function() {
 }
 
 function computeNewSchedule() {
-  SpreadsheetApp.getUi().alert('This function is disabled since the final schedule has been distributed to faculty.');  
-  return;
+  var schedule = SpreadsheetApp.getActiveSpreadsheet();
+  var config_sheet = schedule.getSheetByName(SHEET_NAME_CONFIGURATION);
+  var SCHEDULE_DISTRIBUTED = config_sheet.getRange(2,1,1,1).getValue();
+  if (SCHEDULE_DISTRIBUTED) {
+    SpreadsheetApp.getUi().alert('This function is disabled since the final schedule has been distributed to faculty.');  
+    return;
+  }
   RunSchedulingEngine(false);
 }
 
 function revisePriorSchedule() {
-  SpreadsheetApp.getUi().alert('This function is disabled since the final revised schedule has been exported for entry to the registrar.');  
-  return;
+  var schedule = SpreadsheetApp.getActiveSpreadsheet();
+  var config_sheet = schedule.getSheetByName(SHEET_NAME_CONFIGURATION);
+  var SCHEDULE_BUILT = config_sheet.getRange(3,1,1,1).getValue();
+  if (SCHEDULE_BUILT) {
+    SpreadsheetApp.getUi().alert('This function is disabled since the final revised schedule has been exported for entry to the registrar.');  
+    return;
+  }
   RunSchedulingEngine(true);
 }
 
 function RunSchedulingEngine(usePriorSchedule) {  
   var schedule = SpreadsheetApp.getActiveSpreadsheet();
+  var config_sheet = schedule.getSheetByName(SHEET_NAME_CONFIGURATION);
   var course_constraint_sheet = schedule.getSheetByName(SHEET_NAME_COURSE_CONSTRAINTS);
   var time_slot_sheet = schedule.getSheetByName(SHEET_NAME_TIME_SLOTS);
   var faculty_sheet = schedule.getSheetByName(SHEET_NAME_FACULTY_COURSES_AND_PREFERENCES);
@@ -1173,6 +1279,7 @@ function RunSchedulingEngine(usePriorSchedule) {
   var course_and_time_constraint_sheet = schedule.getSheetByName(SHEET_NAME_COURSE_AND_TIME_CONSTRAINTS);
   var template_output_sheet = schedule.getSheetByName(SHEET_NAME_OUTPUT_TEMPLATE);
   var output_sheet = schedule.getSheetByName(SHEET_NAME_OUTPUT_SHEET);
+  var output_sheet_test = schedule.getSheetByName(SHEET_NAME_OUTPUT_SHEET_TEST);
   var prior_schedule_sheet = schedule.getSheetByName(SHEET_NAME_PRIOR_SCHEDULE_SHEET);  
   
   if (!schedule || !course_constraint_sheet || !room_slot_sheet || !course_and_time_constraint_sheet 
@@ -1189,7 +1296,11 @@ function RunSchedulingEngine(usePriorSchedule) {
   //    room numbers, max seats
   // List of time slots
   //    times and days
-  
+      
+  // Set up the destination sheet for the schedule renderer
+  defaultScheduleRenderer = new ScheduleRenderer();
+  defaultScheduleRenderer.setDestinationSheet(output_sheet_test);
+
   // Copy template sheet to output sheet  
   var template_data_range = template_output_sheet.getDataRange().getDataRegion();
   var template_data_values = template_data_range.getValues();
@@ -1209,10 +1320,20 @@ function RunSchedulingEngine(usePriorSchedule) {
   // Load Room data 
   var room_data = room_slot_sheet.getDataRange();
   var roomList = getRoomsToSchedule(room_data);
+  var roomsToRender = roomList.filter(function(room ) {
+    return true;
+  });
+  defaultScheduleRenderer.setRoomsToRender(roomsToRender);
   
   // Load Time Interval data
   var time_interval_datarange = time_slot_sheet.getDataRange();
   var timeIntervalList = getTimeIntervalsToSchedule(time_interval_datarange);
+
+  // render all time slots 1.5 credit hours or less (75 mins or less)
+  var timesToRender = timeIntervalList.filter(function( timeSlot ) {
+    return timeSlot.credit_hours_per_day <= 1.5;
+  });
+  defaultScheduleRenderer.setTimesToRender(timesToRender);
   
   // Load Faculty Course Assignments and Time Interval Preference data
   var faculty_datarange = faculty_sheet.getDataRange();
@@ -1224,7 +1345,6 @@ function RunSchedulingEngine(usePriorSchedule) {
 
   // Sort all lists by local costs to speed up 1-dimensional searches
   roomList.sort(function (a,b){ return a.cost - b.cost;});  
-  timeIntervalList.sort(function (a,b){ return a.cost - b.cost;});
   
   // Create sorted list of rooms with times and their local costs to speed up 1-dimensional searches
   var roomWithTimeIntervalList=[];
@@ -1233,7 +1353,18 @@ function RunSchedulingEngine(usePriorSchedule) {
       // NOTE: many roomWithTimeInterval objects will share references to individual Room objects and individual CourseTime objects 
       // This saves loads of memory (O(2N) instead of O(N^2)) but we must be mindful that many RoomWithTimeInterval in the RoomWithTimeIntervalList will
       // point to a single Room or CourseTime object.
-      roomWithTimeIntervalList.push(new RoomWithTimeInterval(roomList[roomIdx], timeIntervalList[timeIdx]));
+      //roomWithTimeIntervalList.push(new RoomWithTimeInterval(roomList[roomIdx], timeIntervalList[timeIdx]));
+      
+      // new code varies room capacity by time slot
+      var oCourseTime = timeIntervalList[timeIdx];
+      var oRoom = roomList[roomIdx];
+      var copyCourseTime = new CourseTime(oCourseTime.start, oCourseTime.end, oCourseTime.days.join("/"), oCourseTime.credit_hours_per_day, 
+                        oCourseTime.exclude_course_list, oCourseTime.include_course_list, oCourseTime.cost);      
+      var copyRoom = new Room(oRoom.building, oRoom.number, oRoom.maximum_capacity, oRoom.cost);
+      // ALL CLASSES SCHEDULED AS HYBRID CAPACITY
+      // TODO: CAPACITY MUST BE COMPUTED IN THE findRoomWithTimeInterval() function as it depends on both the course, room and time.
+      copyRoom.maximum_capacity = copyRoom.maximum_capacity * oCourseTime.days.length;
+      roomWithTimeIntervalList.push(new RoomWithTimeInterval(copyRoom, copyCourseTime));
     }
   }
   roomWithTimeIntervalList.sort(function (a,b){ return a.cost - b.cost;});
@@ -1259,7 +1390,9 @@ function RunSchedulingEngine(usePriorSchedule) {
       var scheduledRoomWithTimeInterval = scheduledCourseList[courseIdx];
       var roomWithTimeInterval = new RoomWithTimeInterval(scheduledRoomWithTimeInterval.Room, scheduledRoomWithTimeInterval.CourseTime);
       
+      // render course to schedule
       addCourseToSchedule(output_sheet_data, scheduledRoomWithTimeInterval);
+      defaultScheduleRenderer.addCourseToSchedule(scheduledRoomWithTimeInterval);
       
       Logger.log('ScheduleEngine: Scheduled ' + scheduledRoomWithTimeInterval.getId() + " in " + scheduledRoomWithTimeInterval.Room.getId() + 
         " at " + scheduledRoomWithTimeInterval.CourseTime.getId() + ' with cost ' + scheduledRoomWithTimeInterval.cost); 
@@ -1313,42 +1446,51 @@ function RunSchedulingEngine(usePriorSchedule) {
       " at " + scheduledRoomWithTimeInterval.CourseTime.getId() + ' with cost ' + scheduledRoomWithTimeInterval.cost);    
     Logger.log('ScheduleEngine: Deleting course+time slot ' + roomWithTimeIntervalList[scheduledRoomWithTimeInterval.index].getId());
     
-    // remove the scheduledRoomWithTimeInterval from the roomWithTimeIntervalList (the index to remove is set in the findRoomWithTimeInterval() function)
-    roomWithTimeIntervalList.splice(scheduledRoomWithTimeInterval.index, 1);
-
     // DEBUG
-    //if (nextCourse.equals(new Course("ECGR", 2104, 1))) {
+    //if (nextCourse.equals(new Course(DEFAULT_DEPT_CODE, 3121, 3))) {
     //  var test = 1;
     //}
+
+    // remove the scheduledRoomWithTimeInterval from the roomWithTimeIntervalList (the index to remove is set in the findRoomWithTimeInterval() function)
     
-    // if only part of the times available for the scheduledRoomWithTimeInterval were used, re-insert the remaining time-slots for potential use to schedule other courses
-    var scheduledRoomWithTimeIntervalTotalCreditHours = scheduledRoomWithTimeInterval.CourseTime.credit_hours_per_day * scheduledRoomWithTimeInterval.CourseTime.days.length;
-    var excessDays = (scheduledRoomWithTimeIntervalTotalCreditHours - nextCourse.credit_hours) / scheduledRoomWithTimeInterval.CourseTime.credit_hours_per_day;
-    if (excessDays >= 1) {
-      var oRoom = scheduledRoomWithTimeInterval.Room;
-      var copyRoom = new Room(oRoom.building, oRoom.number, oRoom.maximum_capacity, oRoom.cost);
-      // NOTE: We have to clone this CourseTime object since many roomWithTimeInterval objects in the roomWithTimeIntervalList hold references to a single CourseTime object
-      // Hence we create (2) new CourseTime objects due to the split in days; neither of which can alter the referenced original un-split CourseTime object
-      // copy (1) goes back into the scheduledRoomWithTimeInterval object copy (2) is part of the excessRoomWithTimeInterval object
-      var oCourseTime = scheduledRoomWithTimeInterval.CourseTime;
-      var copyCourseTime = new CourseTime(oCourseTime.start, oCourseTime.end, oCourseTime.days.join("/"), oCourseTime.credit_hours_per_day, 
-                        oCourseTime.exclude_course_list, oCourseTime.include_course_list, oCourseTime.cost);
-      scheduledRoomWithTimeInterval.CourseTime = copyCourseTime; // copy (1) goes back into scheduledRoomWithTimeInterval
-      var excessCourseTimeIntervals = splitCourseTimeByDay(scheduledRoomWithTimeInterval.CourseTime, excessDays); // creates copy (2) and returns it and modifies the days of copy (1) accordingly
-      var excessRoomWithTimeInterval = new RoomWithTimeInterval(copyRoom, excessCourseTimeIntervals);
-      Logger.log('ScheduleEngine: Adding unused course+time slot ' + excessRoomWithTimeInterval.getId());
-      roomWithTimeIntervalList.push(excessRoomWithTimeInterval);
-    } // partially used course times have been split and remaining excessRoomWithTimeInterval has been re-inserted to the available roomWithTimeIntervalList
-    
-    // Returns an array of time intervals to enter for the single course into the standard time interval schedule
-    Logger.log('ScheduleEngine: Deleted index ' + scheduledRoomWithTimeInterval.index + 
-               ' from available course+time slot list. There are ' + roomWithTimeIntervalList.length + ' slots available.');      
+    // When the room is 'NONE', e.g., 'NONE TBA' or 'NONE INTRNET' we do not modify the room availability list (roomWithTimeIntervalList) 
+    // as this room is virtual and has an inexaustible supply of space      
+    if (scheduledRoomWithTimeInterval.Room.building != 'NONE') {    
+      // for *REAL* classrooms, e.g., those having BUILDING != 'NONE' we must remove the space resource and track remaining space
+      roomWithTimeIntervalList.splice(scheduledRoomWithTimeInterval.index, 1);
+      // if only part of the times available for the scheduledRoomWithTimeInterval were used, re-insert the remaining time-slots for potential use to schedule other courses
+      var scheduledRoomWithTimeIntervalTotalCreditHours = scheduledRoomWithTimeInterval.CourseTime.credit_hours_per_day * scheduledRoomWithTimeInterval.CourseTime.days.length;
+      var excessDays = (scheduledRoomWithTimeIntervalTotalCreditHours - nextCourse.credit_hours) / scheduledRoomWithTimeInterval.CourseTime.credit_hours_per_day;
+      if (excessDays >= 1) {
+        var oRoom = scheduledRoomWithTimeInterval.Room;
+        var copyRoom = new Room(oRoom.building, oRoom.number, oRoom.maximum_capacity, oRoom.cost);
+        // NOTE: We have to clone this CourseTime object since many roomWithTimeInterval objects in the roomWithTimeIntervalList hold references to a single CourseTime object
+        // Hence we create (2) new CourseTime objects due to the split in days; neither of which can alter the referenced original un-split CourseTime object
+        // copy (1) goes back into the scheduledRoomWithTimeInterval object copy (2) is part of the excessRoomWithTimeInterval object
+        var oCourseTime = scheduledRoomWithTimeInterval.CourseTime;
+        var copyCourseTime = new CourseTime(oCourseTime.start, oCourseTime.end, oCourseTime.days.join("/"), oCourseTime.credit_hours_per_day, 
+                                            oCourseTime.exclude_course_list, oCourseTime.include_course_list, oCourseTime.cost);
+        scheduledRoomWithTimeInterval.CourseTime = copyCourseTime; // copy (1) goes back into scheduledRoomWithTimeInterval
+        var excessCourseTimeIntervals = splitCourseTimeByDay(scheduledRoomWithTimeInterval.CourseTime, excessDays); // creates copy (2) and returns it and modifies the days of copy (1) accordingly
+        var excessRoomWithTimeInterval = new RoomWithTimeInterval(copyRoom, excessCourseTimeIntervals);
+        Logger.log('ScheduleEngine: Adding unused course+time slot ' + excessRoomWithTimeInterval.getId());
+        roomWithTimeIntervalList.push(excessRoomWithTimeInterval);
+      }
+      // partially used course times have been split and remaining excessRoomWithTimeInterval has been re-inserted to the available roomWithTimeIntervalList
+      // Returns an array of time intervals to enter for the single course into the standard time interval schedule
+      Logger.log('ScheduleEngine: Deleted index ' + scheduledRoomWithTimeInterval.index + 
+                 ' from available course+time slot list. There are ' + roomWithTimeIntervalList.length + ' slots available.');      
+    } else {
+      Logger.log('ScheduleEngine: Scheduled index ' + scheduledRoomWithTimeInterval.index + 
+                 ' into \'NONE\' building course+time slot list. The number of slots available is unchanged at ' + roomWithTimeIntervalList.length + '.');      
+    }
     
     // add to scheduled course list
     var newScheduledCourse = new ScheduledCourse(nextCourse, scheduledRoomWithTimeInterval.Room, scheduledRoomWithTimeInterval.CourseTime, 
                                                  scheduledRoomWithTimeInterval.cost, scheduledRoomWithTimeInterval.instructor, scheduledRoomWithTimeInterval.costArr);
     scheduledCourseList.push(newScheduledCourse);
     addCourseToSchedule(output_sheet_data, newScheduledCourse);
+    defaultScheduleRenderer.addCourseToSchedule(newScheduledCourse);
 
     // remove course from prioritySortedCourseList
     prioritySortedCourseList.splice( prioritySortedCourseList.indexOf(nextCourse), 1 );
@@ -1360,7 +1502,8 @@ function RunSchedulingEngine(usePriorSchedule) {
     output_sheet_data.getCell(OUTPUT_SHEET_INDEX_ROW_NUMCOURSES_OUTPUT, OUTPUT_SHEET_INDEX_COL_NUMCOURSES_OUTPUT).setValue(scheduledCourseList.length);
     Logger.log('ScheduleEngine: Scheduled ' + scheduledCourseList.length + " courses " + prioritySortedCourseList.length + " courses remain to be scheduled.");    
   }  // scheduling complete 
-  
+
+  scheduledCourseList.sort(function (a,b){ return a.Course.numbers[0] - b.Course.numbers[0];});
   transferScheduledCourses('WRITE', prior_schedule_sheet, scheduledCourseList);
 } // exit engine
 
@@ -1370,23 +1513,29 @@ function transferScheduledCourses(transferMode, prior_schedule_sheet, scheduledC
   var COLUMN_INDEX_DEPARTMENT_CODE = 1;
   var COLUMN_INDEX_COURSE_NUMBERS = 2;
   var COLUMN_INDEX_SECTION = 3;
-  var COLUMN_INDEX_CRN_NUMBER = 4;
-  var COLUMN_INDEX_START_TIME = 5;
-  var COLUMN_INDEX_END_TIME = 6;
-  var COLUMN_INDEX_CREDIT_HOURS_PER_DAY = 7;
-  var COLUMN_INDEX_DAYS_OF_WEEK = 8;
-  var COLUMN_INDEX_BUILDING = 9;
-  var COLUMN_INDEX_ROOM = 10;
-  var COLUMN_INDEX_INSTRUCTOR = 11;
-  var COLUMN_INDEX_COST = 12;
-  var COLUMN_INDEX_COST_ARRAY = 13;
+  var COLUMN_INDEX_INSTRUCTIONAL_MODE = 4;
+  var COLUMN_INDEX_CRN_NUMBER = 5;
+  var COLUMN_INDEX_START_TIME = 6;
+  var COLUMN_INDEX_END_TIME = 7;
+  var COLUMN_INDEX_CREDIT_HOURS_PER_DAY = 8;
+  var COLUMN_INDEX_DAYS_OF_WEEK = 9;
+  var COLUMN_INDEX_BUILDING = 10;
+  var COLUMN_INDEX_ROOM = 11;
+  var COLUMN_INDEX_INSTRUCTOR = 12;
+  var COLUMN_INDEX_INSTRUCTOR_EMAIL = 13;
+  var COLUMN_INDEX_COST = 14;
+  var COLUMN_INDEX_COST_ARRAY = 15;
+  var COLUMN_INDEX_EMAIL_SCHEDULE = 16;
+  var COLUMN_INDEX_EMAIL_SPC_TOPICS_TITLE = 17;
   var ROW_INDEX_FIRST_COURSE = 1;
-  var NUM_COLUMNS_PER_COURSE = 12;
+  var NUM_COLUMNS_PER_COURSE = 14;
+  var MAX_COURSES = 200
   // TODO: THE FOLLOWING 2 CONSTANTS APPEAR IN 3 DIFFERENT PLACES IN THE CODE AND MUST BE THE SAME DECLARED VALUES!
   var COST_FACULTY_SAME_DAYS_PREFERENCE = 2.0;
   var COST_FACULTY_TIME_BETWEEN_CLASSES_PREFERENCE = 0.5;  
 
   if (transferMode == 'WRITE') {
+    prior_schedule_sheet.getRange(ROW_INDEX_FIRST_COURSE + 1, 2, MAX_COURSES, 2 + NUM_COLUMNS_PER_COURSE - 1).clearContent();
     var schedule_output_datarange = prior_schedule_sheet.getRange(ROW_INDEX_FIRST_COURSE + 1, 2, scheduledCourseList.length, 2 + NUM_COLUMNS_PER_COURSE - 1);
     var prior_schedule_data = [];
     for (var courseIdx = 0; courseIdx < scheduledCourseList.length; courseIdx++) {
@@ -1403,9 +1552,12 @@ function transferScheduledCourses(transferMode, prior_schedule_sheet, scheduledC
       course_data[COLUMN_INDEX_ROOM - 1] = scheduledCourseList[courseIdx].Room.number;
       if (scheduledCourseList[courseIdx].FacultyCoursesAndPrefs != undefined) {
         course_data[COLUMN_INDEX_INSTRUCTOR - 1] = scheduledCourseList[courseIdx].FacultyCoursesAndPrefs.name;
+        course_data[COLUMN_INDEX_INSTRUCTOR_EMAIL - 1] = scheduledCourseList[courseIdx].FacultyCoursesAndPrefs.email;
       } else {
         course_data[COLUMN_INDEX_INSTRUCTOR - 1] = "undefined";
+        course_data[COLUMN_INDEX_INSTRUCTOR_EMAIL - 1] = "undefined";
       }
+      course_data[COLUMN_INDEX_INSTRUCTIONAL_MODE - 1] = scheduledCourseList[courseIdx].Course.instructional_mode;
       course_data[COLUMN_INDEX_COST - 1] = scheduledCourseList[courseIdx].cost.toFixed(4);
       var ostr = "";
       if (scheduledCourseList[courseIdx].costArray != undefined) {
@@ -1439,6 +1591,7 @@ function transferScheduledCourses(transferMode, prior_schedule_sheet, scheduledC
                                             schedule_input_datarange[i][COLUMN_INDEX_SECTION],
                                             schedule_input_datarange[i][COLUMN_INDEX_CRN_NUMBER],
                                             course_time.days.length * course_time.credit_hours_per_day);
+        preScheduledCourse.instructional_mode = schedule_input_datarange[i][COLUMN_INDEX_INSTRUCTIONAL_MODE];
       
         var roomWithTimeInterval = new RoomWithTimeInterval(room, course_time);
         roomWithTimeInterval.cost = 0;
@@ -1452,8 +1605,8 @@ function transferScheduledCourses(transferMode, prior_schedule_sheet, scheduledC
         for (var facultyIdx = 0; teacherForThisCourse == undefined && facultyIdx < facultyCoursesAndPrefsList.length; facultyIdx++) {
           var faculty = facultyCoursesAndPrefsList[facultyIdx];
           for (var courseIdx = 0; courseIdx < faculty.courseList.length; courseIdx++) {
-            if (preScheduledCourse.equals(faculty.courseList[courseIdx])) {
-              if(preScheduledCourse.section == faculty.courseList[courseIdx].section) {
+            if (preScheduledCourse.sameNumber(faculty.courseList[courseIdx])) {
+              if(preScheduledCourse.sameSection(faculty.courseList[courseIdx])) {
                 teacherForThisCourse = faculty;
                 break;
               }
@@ -1526,7 +1679,12 @@ function transferScheduledCourses(transferMode, prior_schedule_sheet, scheduledC
                 cost += costDelta;
                 costArr['hrs_between_courses'] = costDelta;
                 break;
-              }
+              } //else if (hoursBetweenCourses > teacherForThisCourse.hours_between_courses) {
+                //costDelta = 0.25*(hoursBetweenCourses - teacherForThisCourse.hours_between_courses)*COST_FACULTY_TIME_BETWEEN_CLASSES_PREFERENCE;
+                //cost += costDelta;
+                //costArr['hrs_between_courses'] = costDelta;
+                //break;
+              //}
             }
           }
         }
@@ -1545,18 +1703,21 @@ function insertPreScheduledCourses(course_and_time_constraint_sheet, output_shee
   var COLUMN_INDEX_DEPARTMENT_CODE = 1;
   var COLUMN_INDEX_COURSE_NUMBERS = 2;
   var COLUMN_INDEX_SECTION = 3;
-  var COLUMN_INDEX_CRN_NUMBER = 4;
-  var COLUMN_INDEX_START_TIME = 5;
-  var COLUMN_INDEX_END_TIME = 6;
-  var COLUMN_INDEX_CREDIT_HOURS_PER_DAY = 7;
-  var COLUMN_INDEX_DAYS_OF_WEEK = 8;
-  var COLUMN_INDEX_BUILDING = 9;
-  var COLUMN_INDEX_ROOM = 10;
+  var COLUMN_INDEX_INSTRUCTIONAL_MODE = 4;
+  var COLUMN_INDEX_CRN_NUMBER = 5;
+  var COLUMN_INDEX_START_TIME = 6;
+  var COLUMN_INDEX_END_TIME = 7;
+  var COLUMN_INDEX_CREDIT_HOURS_PER_DAY = 8;
+  var COLUMN_INDEX_DAYS_OF_WEEK = 9;
+  var COLUMN_INDEX_BUILDING = 10;
+  var COLUMN_INDEX_ROOM = 11;
   var ROW_INDEX_FIRST_COURSE = 2;
   
   // TODO: THE FOLLOWING 2 CONSTANTS APPEAR IN 3 DIFFERENT PLACES IN THE CODE AND MUST BE THE SAME DECLARED VALUES!
   var COST_FACULTY_SAME_DAYS_PREFERENCE = 2.0;
   var COST_FACULTY_TIME_BETWEEN_CLASSES_PREFERENCE = 0.5;  
+
+  var ONLINE_ROOM_CONSTANT = new Room('NONE', 'INTRNET');
   
   var hardconstraints_data = course_and_time_constraint_sheet.getDataRange().getValues(); 
   var costTotal = 0;
@@ -1577,6 +1738,13 @@ function insertPreScheduledCourses(course_and_time_constraint_sheet, output_shee
                                             hardconstraints_data[i][COLUMN_INDEX_SECTION],
                                             hardconstraints_data[i][COLUMN_INDEX_CRN_NUMBER],
                                             course_time.days.length * course_time.credit_hours_per_day);
+      hardConstraintCourse.instructional_mode = hardconstraints_data[i][COLUMN_INDEX_INSTRUCTIONAL_MODE];
+      
+      // If instructional mode is either 'Online Synchronous' or 'Online Asynchronous' the required room is 'NONE INTRNET'
+      if (hardConstraintCourse.instructional_mode == 'Online Synchronous' || 
+          hardConstraintCourse.instructional_mode == 'Online Asynchronous') {
+        room = ONLINE_ROOM_CONSTANT;
+      }
       
       var roomWithTimeInterval = new RoomWithTimeInterval(room, course_time);
       roomWithTimeInterval.cost = 0;
@@ -1590,8 +1758,8 @@ function insertPreScheduledCourses(course_and_time_constraint_sheet, output_shee
       for (var facultyIdx = 0; teacherForThisCourse == undefined && facultyIdx < facultyCoursesAndPrefsList.length; facultyIdx++) {
         var faculty = facultyCoursesAndPrefsList[facultyIdx];
         for (var courseIdx = 0; courseIdx < faculty.courseList.length; courseIdx++) {
-          if (hardConstraintCourse.equals(faculty.courseList[courseIdx])) {
-            if(hardConstraintCourse.section == faculty.courseList[courseIdx].section) {
+          if (hardConstraintCourse.sameNumber(faculty.courseList[courseIdx])) {
+            if(hardConstraintCourse.sameSection(faculty.courseList[courseIdx])) {
               teacherForThisCourse = faculty;
               break;
             }
@@ -1664,15 +1832,23 @@ function insertPreScheduledCourses(course_and_time_constraint_sheet, output_shee
               cost += costDelta;
               costArr['hrs_between_courses'] = costDelta;
               break;
-            }
+            } //else if (hoursBetweenCourses > teacherForThisCourse.hours_between_courses) {
+              //costDelta = 0.25*(hoursBetweenCourses - teacherForThisCourse.hours_between_courses)*COST_FACULTY_TIME_BETWEEN_CLASSES_PREFERENCE;
+              //cost += costDelta;
+              //costArr['hrs_between_courses'] = costDelta;
+              //break;
+            //}
           }
         }
       }
 
       var newScheduledCourse = new ScheduledCourse(hardConstraintCourse, room, course_time, cost, teacherForThisCourse, costArr);
       scheduledCourseList.push(newScheduledCourse);
-      addCourseToSchedule(output_sheet_data, newScheduledCourse);
       
+      // render the course to a sheet
+      addCourseToSchedule(output_sheet_data, newScheduledCourse);
+      defaultScheduleRenderer.addCourseToSchedule(newScheduledCourse);
+            
       Logger.log('ScheduleEngine: Scheduled ' + hardConstraintCourse.getId() + ' in ' + room.getId() + 
         " at " + course_time.getId() + ' with cost ' + roomWithTimeInterval.cost);    
 
@@ -1690,7 +1866,13 @@ function insertPreScheduledCourses(course_and_time_constraint_sheet, output_shee
   return costTotal;
 }
 
-function removeFromList(scheduledRoomWithTimeInterval, roomWithTimeInterval, roomWithTimeIntervalList, meetsRemovalCriteria) {
+function removeFromList(scheduledRoomWithTimeInterval, roomWithTimeInterval, roomWithTimeIntervalList, meetsRemovalCriteria) { 
+  // When the room is 'NONE', e.g., 'NONE TBA' or 'NONE INTRNET' we do not modify the room availability list (roomWithTimeIntervalList) 
+  // as this room is virtual and has an inexaustible supply of space
+  if (scheduledRoomWithTimeInterval.Room.building == 'NONE') {
+    return;
+  }
+  
   var foundIdxs=[];
   for (var idx=0; idx < roomWithTimeIntervalList.length; idx++) {
     var query = roomWithTimeIntervalList[idx];
@@ -1738,14 +1920,15 @@ function getCoursesToSchedule(course_datarange) {
   var COLUMN_INDEX_DEPARTMENT_CODE = 1;
   var COLUMN_INDEX_COURSE_NUMBERS = 2;
   var COLUMN_INDEX_COURSE_SECTION = 3;
-  var COLUMN_INDEX_COURSE_CRN_NUMBER = 4;
-  var COLUMN_INDEX_COURSE_CREDIT_HOURS = 5;
-  var COLUMN_INDEX_COURSE_PRIORITY = 6;  
-  var COLUMN_INDEX_COURSE_EXPECTED_ENROLLMENT = 7;  
-  var COLUMN_INDEX_COURSE_NOT_SIMULTANEOUS_COURSES = 8;
-  var COLUMN_INDEX_COURSE_SIMULTANEOUS_COURSES = 9;
-  var COLUMN_INDEX_REQUIRED_ROOM_IDS = 10;
-  var COLUMN_INDEX_EXCLUDED_ROOM_IDS = 11;
+  var COLUMN_INDEX_COURSE_INSTRUCTIONAL_MODE = 4;
+  var COLUMN_INDEX_COURSE_CRN_NUMBER = 5;
+  var COLUMN_INDEX_COURSE_CREDIT_HOURS = 6;
+  var COLUMN_INDEX_COURSE_PRIORITY = 7;  
+  var COLUMN_INDEX_COURSE_EXPECTED_ENROLLMENT = 8;  
+  var COLUMN_INDEX_COURSE_NOT_SIMULTANEOUS_COURSES = 9;
+  var COLUMN_INDEX_COURSE_SIMULTANEOUS_COURSES = 10;
+  var COLUMN_INDEX_REQUIRED_ROOM_IDS = 11;
+  var COLUMN_INDEX_EXCLUDED_ROOM_IDS = 12;
   var ROW_INDEX_FIRST_COURSE = 1;
   
   var course_data = course_datarange.getValues();  
@@ -1758,6 +1941,7 @@ function getCoursesToSchedule(course_datarange) {
       var dept_code = course_data[rowIdx][COLUMN_INDEX_DEPARTMENT_CODE];
       var numbers = course_data[rowIdx][COLUMN_INDEX_COURSE_NUMBERS];
       var section = course_data[rowIdx][COLUMN_INDEX_COURSE_SECTION];
+      var instructional_mode = course_data[rowIdx][COLUMN_INDEX_COURSE_INSTRUCTIONAL_MODE];
       var crn = course_data[rowIdx][COLUMN_INDEX_COURSE_CRN_NUMBER];
       var credit_hours = course_data[rowIdx][COLUMN_INDEX_COURSE_CREDIT_HOURS];
       var priority = course_data[rowIdx][COLUMN_INDEX_COURSE_PRIORITY];
@@ -1767,7 +1951,7 @@ function getCoursesToSchedule(course_datarange) {
       var these_rooms_only_ids = parseCommaSeparatedArray(course_data[rowIdx][COLUMN_INDEX_REQUIRED_ROOM_IDS].toString(), "rooms");
       var excluded_rooms = parseCommaSeparatedArray(course_data[rowIdx][COLUMN_INDEX_EXCLUDED_ROOM_IDS].toString(), "rooms");
       var course = new Course(dept_code, numbers, section, crn, credit_hours, priority, expected_enrollment, 
-                              not_simultaneous_courses, simultaneous_courses, these_rooms_only_ids, excluded_rooms);
+                              not_simultaneous_courses, simultaneous_courses, these_rooms_only_ids, excluded_rooms, instructional_mode);
       courseList.push(course);
     }    
   }
@@ -1810,6 +1994,7 @@ function parseRoomListElement(str) {
   // remove spaces in the string
   //str = str.replace(/\s/g, '');
   //var building = /[A-Z]{4}/.exec(str); // 4 capital letters,, if null assume DEFAULT_BUILDING
+  str = str.trim();
   str = str.split(' ');
   var building = (str.length == 1) ? undefined : str[0];
   var number = (str.length == 1) ? str[0] : str[1];
@@ -1825,7 +2010,7 @@ function parseRoomListElement(str) {
 
 function parseCourseListElement(str) {
   // HARD-CODED CONSTANTS
-  var DEFAULT_DEPT_CODE = "ECGR";
+  //var DEFAULT_DEPT_CODE = DEFAULT_DEPT_CODE;
 
   var dept_code = /[A-Z]{4}/.exec(str); // 4 capital letters, if null assume DEFAULT_DEPT_CODE
   if (dept_code == null) {
@@ -1836,8 +2021,9 @@ function parseCourseListElement(str) {
   str = str.split("-");
   var number = /[0-9,?]{4}/.exec(str[0])[0]; // 4 digits (required)
   var section = 1; // default section if none found
-  if (str.length > 1) {  // 1 optional capital letter, 1 or 2 digits (required) 
-    section = /[A-Z]?[\d]{1,2}/.exec(str[1]);
+  if (str.length > 1) {  // 2 optional capital letter or digit and 1 (required) additional digit
+    //section = /[A-Z]?[\d]{1,2}/.exec(str[1]);
+    section = /[A-Z0-9]{2}?[0-9]{1}/.exec(str[1]);
   }
   return new Course(dept_code, number, section);
 }
@@ -1856,6 +2042,9 @@ function getRoomsToSchedule(room_datarange) {
   
   for (var rowIdx = ROW_INDEX_FIRST_ROOM; rowIdx < room_datarange.getHeight(); rowIdx++) {
     var building = room_data[rowIdx][COLUMN_INDEX_BUILDING];
+    if (building.trim() == "") {
+      continue;
+    }
     var number = room_data[rowIdx][COLUMN_INDEX_ROOM_NUMBER];
     var maximum_capacity = room_data[rowIdx][COLUMN_INDEX_MAXIMUM_CAPACITY];
     var cost = room_data[rowIdx][COLUMN_INDEX_COST];
@@ -1904,9 +2093,10 @@ function getFacultyCoursesAndPreferencesToSchedule(faculty_datarange, courseTime
   var COLUMN_INDEX_FACULTY_NAME = 0;
   var COLUMN_INDEX_FACULTY_EMAIL = 1;
   var COLUMN_INDEX_COURSE_ASSIGNMENTS_RANGE = [2, 10];  
-  var COLUMN_INDEX_PREFS_SAME_DAYS = 11;
-  var COLUMN_INDEX_PREFS_HOURS_BETWEEN_COURSES = 12;  
-  var COLUMN_INDEX_PREFS_TIME_INTERVAL_COSTS = [14, 38];
+  var COLUMN_INDEX_AT_RISK = 11;
+  var COLUMN_INDEX_PREFS_SAME_DAYS = 12;
+  var COLUMN_INDEX_PREFS_HOURS_BETWEEN_COURSES = 13;  
+  var COLUMN_INDEX_PREFS_TIME_INTERVAL_COSTS = [15, 39];
   var DEFAULT_PREFS_TIME_INTERVAL_COST = 0;
   var ROW_INDEX_FIRST_FACULTY = 3;
   
@@ -1950,9 +2140,10 @@ function putFacultyCoursesAndPreferences(faculty_datarange, courseTimeList, facu
   var COLUMN_INDEX_FACULTY_NAME = 0;
   var COLUMN_INDEX_FACULTY_EMAIL = 1;
   var COLUMN_INDEX_COURSE_ASSIGNMENTS_RANGE = [2, 10];  
-  var COLUMN_INDEX_PREFS_SAME_DAYS = 11;
-  var COLUMN_INDEX_PREFS_HOURS_BETWEEN_COURSES = 12;  
-  var COLUMN_INDEX_PREFS_TIME_INTERVAL_COSTS = [14, 38];
+  var COLUMN_INDEX_AT_RISK = 11;
+  var COLUMN_INDEX_PREFS_SAME_DAYS = 12;
+  var COLUMN_INDEX_PREFS_HOURS_BETWEEN_COURSES = 13;
+  var COLUMN_INDEX_PREFS_TIME_INTERVAL_COSTS = [15, 39];
   var DEFAULT_PREFS_TIME_INTERVAL_COST = 0;
   var ROW_INDEX_FIRST_FACULTY = 3;
   
@@ -2005,8 +2196,8 @@ function importFacultyPreferences(import_faculty_prefs_datarange, courseTimeList
   var MAP_HoursBetweenCoursesString_To_Value = {};
   MAP_HoursBetweenCoursesString_To_Value['No preference, I can teach courses back-to-back.'] = 0;
   MAP_HoursBetweenCoursesString_To_Value['I prefer 1 hour between courses on the same day.'] = 1;  
-  MAP_HoursBetweenCoursesString_To_Value['I prefer 2 hours between courses on the same day.'] = 1;  
-  MAP_HoursBetweenCoursesString_To_Value['I prefer 3 hours between courses on the same day.'] = 1;  
+  MAP_HoursBetweenCoursesString_To_Value['I prefer 2 hours between courses on the same day.'] = 2;  
+  MAP_HoursBetweenCoursesString_To_Value['I prefer 3 hours between courses on the same day.'] = 3;  
 
   var import_faculty_prefs_data = import_faculty_prefs_datarange.getValues();  
   var importedFacultyPrefsList=[];
@@ -2031,10 +2222,10 @@ function importFacultyPreferences(import_faculty_prefs_datarange, courseTimeList
           }
         }
         if (import_faculty_prefs_data[rowIdx][colIdx] != "") {
-            prefStringArray = import_faculty_prefs_data[rowIdx][colIdx].split(";"); // if more than one preference was specified
+            prefStringArray = import_faculty_prefs_data[rowIdx][colIdx].split(","); // if more than one preference was specified
             var avgCost = 0;
             for (var strIdx = 0; strIdx < prefStringArray.length; strIdx++) {
-              avgCost += convertTimePreferenceStringToCost(prefStringArray[strIdx]);
+              avgCost += convertTimePreferenceStringToCost(prefStringArray[strIdx].trim());
             }
             avgCost /= prefStringArray.length;
             timeIntervalCostMap[courseTimeList[colIdx + skipIdx - COLUMN_INDEX_PREFS_TIME_INTERVAL_COSTS[0]].getId()] = avgCost;
@@ -2057,6 +2248,7 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
   var TARGET_ROOM_OCCUPANCY_PCT = 0.8;
   var COST_ROOM_OCCUPANCY_PCT_MULTIPLIER = 1.0;
   var COST_SLOT_CREDIT_HOUR_MULTIPLIER = 2.0;
+  var COST_SLOT_UNOCCUPIED_MULTIPLIER = 2.0;
   
   // TODO: ARE THESE 3 BOOLEANS STILL NECESSARY? SEEMS LIKE WE ALWAYS WANT TO CONSIDER "ALL" THE DATA
   var USE_FACULTY_TIME_PREFERENCES = true;
@@ -2065,19 +2257,42 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
   // TODO: THE FOLLOWING 2 CONSTANTS APPEAR IN 3 DIFFERENT PLACES IN THE CODE AND MUST BE THE SAME DECLARED VALUES!
   var COST_FACULTY_SAME_DAYS_PREFERENCE = 2.0;
   var COST_FACULTY_TIME_BETWEEN_CLASSES_PREFERENCE = 0.5;
+  var ONLINE_ROOM_CONSTANT = new Room('NONE', 'INTRNET');
   
   var candidateRoomWithTimeIntervalList = [];
   
   var teacherForThisCourse;
   var teacher_scheduledCourseList = [];
   
+  // If instructional mode is either 'Online Synchronous' or 'Online Asynchronous' the required room is 'NONE INTRNET'
+  if (nextCourse.instructional_mode == 'Online Synchronous' || 
+      nextCourse.instructional_mode == 'Online Asynchronous') {
+    var hasOnlineRoomRequired = false;
+    for (var roomIdx = 0; roomIdx < nextCourse.required_rooms.length; roomIdx++) {
+      if (!nextCourse.required_rooms[roomIdx].equals(ONLINE_ROOM_CONSTANT)) {
+        //SpreadsheetApp.getUi().alert('Course ' + nextCourse.getId() + ' is set to ONLINE but has required room '+
+        //                             nextCourse.required_rooms[roomIdx].getId());  
+        //throw Error( "Exiting due to data entry error." );
+        Logger.log('ScheduleEngine: WARNING: Course ' + nextCourse.getId() + ' is set to ONLINE but has required room '+ nextCourse.required_rooms[roomIdx].getId() +'.');
+        nextCourse.required_rooms.splice(roomIdx, 1); 
+        roomIdx--;
+      } else {
+        hasOnlineRoomRequired = true;
+      }
+    }
+    // add the online 'NONE INTRNET' room as a required room if it has not already been entered into the 'Course' tab data already
+    if (!hasOnlineRoomRequired) {
+      nextCourse.required_rooms.push(ONLINE_ROOM_CONSTANT);
+    }
+  }
+  
   // Find the faculty member teaching this course (nextCourse) store the data in teacherForThisCourse
   if (USE_FACULTY_TIME_PREFERENCES) {
     for (var facultyIdx = 0; teacherForThisCourse == undefined && facultyIdx < facultyCoursesAndPrefsList.length; facultyIdx++) {
       var faculty = facultyCoursesAndPrefsList[facultyIdx];
       for (var courseIdx = 0; courseIdx < faculty.courseList.length; courseIdx++) {
-        if (nextCourse.equals(faculty.courseList[courseIdx])) {
-          if(nextCourse.section == faculty.courseList[courseIdx].section) {
+        if (nextCourse.sameNumber(faculty.courseList[courseIdx])) {
+          if(nextCourse.sameSection(faculty.courseList[courseIdx])) {
             teacherForThisCourse = faculty;
             break;
           }
@@ -2172,7 +2387,12 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
               cost += costDelta;
               costArr['hrs_between_courses'] = costDelta;
               break;
-            }
+            } //else if (hoursBetweenCourses > teacherForThisCourse.hours_between_courses) {
+              //costDelta = 0.25*(hoursBetweenCourses - teacherForThisCourse.hours_between_courses)*COST_FACULTY_TIME_BETWEEN_CLASSES_PREFERENCE;
+              //cost += costDelta;
+              //costArr['hrs_between_courses'] = costDelta;
+              //break;
+            //}
           }
         }
       }
@@ -2185,7 +2405,7 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
         idxIsOK = false;
         var include_course_list = candidateRoomWithTimeInterval.CourseTime.include_course_list;
         for (var include_course_idx = 0; include_course_idx < include_course_list.length; include_course_idx++) {
-          if (nextCourse.equals(include_course_list[include_course_idx])) {
+          if (nextCourse.sameNumber(include_course_list[include_course_idx])) {
             idxIsOK = true;
             break; // this candidateRoomWithTimeInterval can include this course
           }
@@ -2199,7 +2419,7 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
       if (candidateRoomWithTimeInterval.CourseTime.exclude_course_list.length > 0) {
         var exclude_course_list = candidateRoomWithTimeInterval.CourseTime.exclude_course_list;
         for (var exclude_course_idx = 0; exclude_course_idx < exclude_course_list.length; exclude_course_idx++) {
-          if (nextCourse.equals(exclude_course_list[exclude_course_idx])) {
+          if (nextCourse.sameNumber(exclude_course_list[exclude_course_idx])) {
             idxIsOK = false;
             break; // this candidateRoomWithTimeInterval cannot include this course
           }
@@ -2225,6 +2445,13 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
       if (slotTotalCreditHours >= nextCourse.credit_hours) {
         // penalize by adding cost for excess credit hours of scheduled room time
         costDelta = COST_SLOT_CREDIT_HOUR_MULTIPLIER * (slotTotalCreditHours - nextCourse.credit_hours);
+        // If this is not a perfect fit a split may occur. Prefer: Split 1 hr/day courses for a 1 hr section and 1.5 hr/day slots for a 1.5 hr section
+        if (costDelta > 0) {
+          var days_needed = nextCourse.credit_hours/candidateRoomWithTimeInterval.CourseTime.credit_hours_per_day;
+          var hrs_unoccupied = COST_SLOT_UNOCCUPIED_MULTIPLIER*Math.ceil(days_needed) - days_needed;
+          costDelta = hrs_unoccupied;
+          costArr['hrs_unoccupied'] = costDelta;
+        }
         cost += costDelta;
         if (costDelta != 0) {
           costArr['credit_hours'] = costDelta;
@@ -2273,7 +2500,7 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
             }
 
       // detect offering of the same course in the same time slot on overlapping days, if so, skip this room and time interval
-      if (query.Course.equals(nextCourse) && query.CourseTime.equals(candidateRoomWithTimeInterval.CourseTime) && query.CourseTime.daysInCommon(candidateRoomWithTimeInterval.CourseTime).length > 0) {
+      if (query.Course.sameNumber(nextCourse) && query.CourseTime.equals(candidateRoomWithTimeInterval.CourseTime) && query.CourseTime.daysInCommon(candidateRoomWithTimeInterval.CourseTime).length > 0) {
         idxIsOK = false;
       }
       
@@ -2322,7 +2549,7 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
   candidateRoomWithTimeIntervalList.sort(function (a,b){ return a.cost - b.cost;});
   
   // DEBUG
-  //if (nextCourse.equals(new Course("ECGR","4290"))) {
+  //if (nextCourse.equals(new Course(DEFAULT_DEPT_CODE,"4290"))) {
   //  var test = 1;
   //}
   
@@ -2356,6 +2583,10 @@ function splitCourseTimeByDay(course_time, excessDays, occupiedCourseTime) {
   }
 }
 
+var instructionalModeToString = {
+    'Face to Face': 'F2F', 'Hybrid Simulcast': 'SIM', 'Pure Hybrid': 'HY', 'Online Synchronous': 'IS', 'Online Asynchronous': 'IA'
+};
+
 // Adds the passed course, and roomWithTimeInterval to the schedule
 function addCourseToSchedule(output_sheet_data, newScheduledCourse) {
   // HARD-CODED CONSTANTS
@@ -2375,6 +2606,7 @@ function addCourseToSchedule(output_sheet_data, newScheduledCourse) {
   var hoursScheduled = 0;
   var roomRowIdxs = [];
   // this checking on credit hours isn't totally necessary and could be removed without harm 
+  // this actually may be needed for when a course with a small (say 1) credit hour need schedules into a slot having more (say 3) credit hours
   var total_credit_hours = (newScheduledCourse.Course.credit_hours == undefined) ? 10 : newScheduledCourse.Course.credit_hours;
   
   for (var slotColIdx = 0; hoursScheduled < total_credit_hours && slotColIdx < days_of_week_colIdxs.length; slotColIdx++) {
@@ -2383,20 +2615,32 @@ function addCourseToSchedule(output_sheet_data, newScheduledCourse) {
                                             timeinterval_rowRange[0] + OUTPUT_SHEET_ROOM_INDEX_ROW_OFFSET, timeinterval_rowRange[1] + OUTPUT_SHEET_ROOM_INDEX_ROW_OFFSET);
     }
     for (var slotRowIdx = 0; slotRowIdx < roomRowIdxs.length; slotRowIdx++) {
-      var facultyNameList = newScheduledCourse.FacultyCoursesAndPrefs.name.split(" ");
-      var slotString = newScheduledCourse.Course.getId() + 
-          ((newScheduledCourse.FacultyCoursesAndPrefs != undefined) ? (" " + facultyNameList[facultyNameList.length-1] + " " + newScheduledCourse.costArray['faculty_time']) : "");
+      var courseToRender = newScheduledCourse;
+      var instructionalModeAcronym = instructionalModeToString[courseToRender.Course.instructional_mode];
+      var facultyName = "";
+      var facultyprefCost = "";
+      if (courseToRender.FacultyCoursesAndPrefs != undefined) {
+        var facultyNameList = courseToRender.FacultyCoursesAndPrefs.name.split(" ");
+        facultyName = " " + facultyNameList[0].replace(/,\s*$/, "") + " ";
+        facultyprefCost = (courseToRender.costArray['faculty_time'] == undefined) ? 'X' : courseToRender.costArray['faculty_time'];
+      }
+      var slotString = courseToRender.Course.getId() + " " + instructionalModeAcronym + facultyName + facultyprefCost;
       if (slotRowIdx > 0) {
         slotString = '*' + slotString;
       }
-      output_sheet_data.getCell(roomRowIdxs[slotRowIdx], days_of_week_colIdxs[slotColIdx]).setValue(slotString);
+      var curValue = output_sheet_data.getCell(roomRowIdxs[slotRowIdx], days_of_week_colIdxs[slotColIdx]).getValue();
+      if (curValue != "") {
+        output_sheet_data.getCell(roomRowIdxs[slotRowIdx], days_of_week_colIdxs[slotColIdx]).setValue(curValue + '\n' + slotString);
+      } else {
+        output_sheet_data.getCell(roomRowIdxs[slotRowIdx], days_of_week_colIdxs[slotColIdx]).setValue(slotString);
+      }
     }
     hoursScheduled += newScheduledCourse.CourseTime.credit_hours_per_day;
   }
   if (roomRowIdxs.length > 0) {
     var curCost = output_sheet_data.getCell(roomRowIdxs[0], output_cost_column_index).getValue();
     if (curCost != "") {
-      output_sheet_data.getCell(roomRowIdxs[0], output_cost_column_index).setValue(curCost + ',' + newScheduledCourse.cost.toFixed(2));
+      output_sheet_data.getCell(roomRowIdxs[0], output_cost_column_index).setValue(curCost + '\n' + newScheduledCourse.cost.toFixed(2));
     } else {
       output_sheet_data.getCell(roomRowIdxs[0], output_cost_column_index).setValue(newScheduledCourse.cost.toFixed(2));
     }
@@ -2418,10 +2662,10 @@ function findRoomRowsInOutputSheet(output_sheet_data, room_id, columnIdx, start_
   return roomRowIdxs;
 }
 
-// department code is valid if it is "ENGR" or "ECGR"
+// department code is valid if it is "ENGR" or DEFAULT_DEPT_CODE
 function isValidDeptCode(cellValue) {
   // HARD-CODED CONSTANTS
-  if (cellValue == "ENGR" || cellValue == "ECGR") {  
+  if (cellValue == "ENGR" || cellValue == DEFAULT_DEPT_CODE) {  
     return true;
   }
   return false;
@@ -2446,8 +2690,9 @@ function convertTimeIntervalToRowRange(start_time, end_time) {
   rowIndices.push(convertTimeToRowIndex(end_time));
   return rowIndices;
 }
-
+                      
 function convertTimeToRowIndex(timeval) {
+  
   // HARD-CODED CONSTANTS --> TODO FIX
   var MINS_PER_ROW = 5
   var START_ROW = 3
