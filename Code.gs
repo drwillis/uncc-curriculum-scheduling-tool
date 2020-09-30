@@ -123,7 +123,7 @@ function testBannerLogin() {
 }
 
 function pullUniversityBuiltCoursesAndValidate() {
-/* Reports from AA - Monique Wilson has this format
+/* Reports from AA - Monique Wilson had this format
   var COLUMN_INDEX_SUBJECT = 5;
   var COLUMN_INDEX_COURSE_NUMBER = 6;
   var COLUMN_INDEX_SECTION = 7;
@@ -147,7 +147,7 @@ function pullUniversityBuiltCoursesAndValidate() {
   var COLUMN_INDEX_ROOM = 25;  
   var ROW_INDEX_FIRST_COURSE = 1;
   */
-  // Reports from AA - Nickcoy Findlater has this format
+  // Reports from AA - Nickcoy Findlater have this format
   var COLUMN_INDEX_SUBJECT = 2;
   var COLUMN_INDEX_COURSE_NUMBER = 3;
   var COLUMN_INDEX_SECTION = 4;
@@ -2249,6 +2249,10 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
   var COST_ROOM_OCCUPANCY_PCT_MULTIPLIER = 1.0;
   var COST_SLOT_CREDIT_HOUR_MULTIPLIER = 2.0;
   var COST_SLOT_UNOCCUPIED_MULTIPLIER = 2.0;
+    
+  var USE_TRAVEL_TIME = true;
+  var COST_TRAVEL_TIME = 0.1;
+  var MIN_TRAVEL_TIME = 30; // at least MIN_TRAVEL_TIME minutes must be available when classes are back to back in different campus buildings
   
   // TODO: ARE THESE 3 BOOLEANS STILL NECESSARY? SEEMS LIKE WE ALWAYS WANT TO CONSIDER "ALL" THE DATA
   var USE_FACULTY_TIME_PREFERENCES = true;
@@ -2370,7 +2374,7 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
           }
         }
       }
-    } 
+    }
     
     // Minimum Time Between Classes Preference 
     // if the faculty is already scheduled for a 3hr time slot, check in the candidateRoomWithTimeInterval.CourseTime
@@ -2385,19 +2389,42 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
             if (hoursBetweenCourses < teacherForThisCourse.hours_between_courses) {
               costDelta = COST_FACULTY_TIME_BETWEEN_CLASSES_PREFERENCE;
               cost += costDelta;
-              costArr['hrs_between_courses'] = costDelta;
+              costArr['hrs_between_courses(too small)'] = costDelta;
               break;
             } //else if (hoursBetweenCourses > teacherForThisCourse.hours_between_courses) {
               //costDelta = 0.25*(hoursBetweenCourses - teacherForThisCourse.hours_between_courses)*COST_FACULTY_TIME_BETWEEN_CLASSES_PREFERENCE;
               //cost += costDelta;
-              //costArr['hrs_between_courses'] = costDelta;
+              //costArr['hrs_between_courses(too large)'] = costDelta;
               //break;
             //}
           }
         }
       }
     }
-      
+
+    // Building-to-Building Travel Time Between Classes Constraint
+    // If the faculty is already scheduled for classes, check the candidateRoomWithTimeInterval.CourseTime to see if teaching is on the
+    // same days and, if the classes are in different *REAL* buildings, we add COST_TRAVEL_TIME cost if this slot starts or ends less then MIN_TRAVEL_TIME (30 mins)
+    // before or after the teacher's existing class.
+    if (teacherForThisCourse != undefined && teacher_scheduledCourseList.length > 0) {
+      for (var idx2 = 0; idx2 < teacher_scheduledCourseList.length; idx2++) {
+        var numDaysInCommon = candidateRoomWithTimeInterval.CourseTime.daysInCommon(teacher_scheduledCourseList[idx2].CourseTime).length;
+        if (numDaysInCommon > 0) {
+          if (candidateRoomWithTimeInterval.Room.building != teacher_scheduledCourseList[idx2].Room.building) {
+            if (candidateRoomWithTimeInterval.Room.building != 'NONE' && teacher_scheduledCourseList[idx2].Room.building != 'NONE') {
+              var minutesBetweenCourses = candidateRoomWithTimeInterval.CourseTime.hoursBetween(teacher_scheduledCourseList[idx2].CourseTime)*60;
+              //var err = Math.abs(teacherForThisCourse.hours_between_courses - hoursBetweenCourses);
+              if (minutesBetweenCourses < teacherForThisCourse.hours_between_courses) {
+                costDelta = COST_TRAVEL_TIME;
+                cost += costDelta;
+                costArr['travel_time'] = costDelta;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
     
     // check if room includes only a specific list of courses, if so, make sure this course is OK or skip this candidateRoomWithTimeInterval
     if (idxIsOK) {
@@ -2640,7 +2667,7 @@ function addCourseToSchedule(output_sheet_data, newScheduledCourse) {
   if (roomRowIdxs.length > 0) {
     var curCost = output_sheet_data.getCell(roomRowIdxs[0], output_cost_column_index).getValue();
     if (curCost != "") {
-      output_sheet_data.getCell(roomRowIdxs[0], output_cost_column_index).setValue(curCost + '\n' + newScheduledCourse.cost.toFixed(2));
+      output_sheet_data.getCell(roomRowIdxs[0], output_cost_column_index).setValue(curCost + ', ' + newScheduledCourse.cost.toFixed(2));
     } else {
       output_sheet_data.getCell(roomRowIdxs[0], output_cost_column_index).setValue(newScheduledCourse.cost.toFixed(2));
     }
