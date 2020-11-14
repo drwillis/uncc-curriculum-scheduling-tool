@@ -11,22 +11,22 @@ function ScheduleRenderer(semester) {
   var roomListSU = [];
   if (semester == "Summer") {
     this.dayTimeSlotLists = { 
-      M: { times: timeListMWF, rooms: roomListMWF, startRow: 1, hide: false, time_room_column: 1 , output_column: 2 , cost_column: 7 },
-      T: { times: timeListTR , rooms: roomListTR , startRow: 1, hide:  true, time_room_column: 1 , output_column: 3 , cost_column: 7 },
-      W: { times: timeListMWF, rooms: roomListMWF, startRow: 1, hide:  true, time_room_column: 1 , output_column: 4 , cost_column: 7 },
-      R: { times: timeListTR , rooms: roomListTR , startRow: 1, hide:  true, time_room_column: 1 , output_column: 5 , cost_column: 7 },
-      F: { times: timeListMWF, rooms: roomListMWF, startRow: 1, hide:  true, time_room_column: 1 , output_column: 6 , cost_column: 7 },
-      S: { times: timeListSU , rooms: roomListSU , startRow: 1, hide:  true, time_room_column: 1 , output_column: 8 , cost_column: 7 },
-      U: { times: timeListSU , rooms: roomListSU , startRow: 1, hide:  true, time_room_column: 1 , output_column: 9 , cost_column: 7 }};    
+      M: { times: timeListMWF, rooms: roomListMWF, startRow: 2, hide: false, time_room_column: 1 , output_column: 2 , cost_column: 7, title: 'Monday'},
+      T: { times: timeListTR , rooms: roomListTR , startRow: 2, hide:  true, time_room_column: 1 , output_column: 3 , cost_column: 7, title: 'Tuesday' },
+      W: { times: timeListMWF, rooms: roomListMWF, startRow: 2, hide:  true, time_room_column: 1 , output_column: 4 , cost_column: 7, title: 'Wednesday' },
+      R: { times: timeListTR , rooms: roomListTR , startRow: 2, hide:  true, time_room_column: 1 , output_column: 5 , cost_column: 7, title: 'Thursday' },
+      F: { times: timeListMWF, rooms: roomListMWF, startRow: 2, hide:  true, time_room_column: 1 , output_column: 6 , cost_column: 7, title: 'Friday' },
+      S: { times: timeListSU , rooms: roomListSU , startRow: 2, hide:  true, time_room_column: 1 , output_column: 8 , cost_column: 7, title: 'Saturday' },
+      U: { times: timeListSU , rooms: roomListSU , startRow: 2, hide:  true, time_room_column: 1 , output_column: 9 , cost_column: 7, title: 'Sunday' }};    
   } else {
     this.dayTimeSlotLists = { 
-      M: { times: timeListMWF, rooms: roomListMWF, startRow: 1 , hide: false, time_room_column: 1 , output_column: 2 , cost_column: 5 },
-      T: { times: timeListTR , rooms: roomListTR , startRow: 27, hide: false, time_room_column: 6 , output_column: 7 , cost_column: 9 },
-      W: { times: timeListMWF, rooms: roomListMWF, startRow: 1 , hide: true , time_room_column: 1 , output_column: 3 , cost_column: 5 },
-      R: { times: timeListTR , rooms: roomListTR , startRow: 27, hide: true , time_room_column: 6 , output_column: 8 , cost_column: 9 },
-      F: { times: timeListMWF, rooms: roomListMWF, startRow: 1 , hide: true , time_room_column: 1 , output_column: 4 , cost_column: 5 },
-      S: { times: timeListSU , rooms: roomListSU , startRow: 1 , hide: false, time_room_column: 10, output_column: 11, cost_column: 13},
-      U: { times: timeListSU , rooms: roomListSU , startRow: 1 , hide: true , time_room_column: 10, output_column: 12, cost_column: 13}};
+      M: { times: timeListMWF, rooms: roomListMWF, startRow: 2 , hide: false, time_room_column: 1 , output_column: 2 , cost_column:  5, title: 'Monday' },
+      T: { times: timeListTR , rooms: roomListTR , startRow: 28, hide: false, time_room_column: 6 , output_column: 7 , cost_column:  9, title: 'Tuesday' },
+      W: { times: timeListMWF, rooms: roomListMWF, startRow: 2 , hide: true , time_room_column: 1 , output_column: 3 , cost_column:  5, title: 'Wednesday' },
+      R: { times: timeListTR , rooms: roomListTR , startRow: 28, hide: true , time_room_column: 6 , output_column: 8 , cost_column:  9, title: 'Thursday' },
+      F: { times: timeListMWF, rooms: roomListMWF, startRow: 2 , hide: true , time_room_column: 1 , output_column: 4 , cost_column:  5, title: 'Friday' },
+      S: { times: timeListSU , rooms: roomListSU , startRow: 2 , hide: false, time_room_column: 10, output_column: 11, cost_column: 13, title: 'Saturday'},
+      U: { times: timeListSU , rooms: roomListSU , startRow: 2 , hide: true , time_room_column: 10, output_column: 12, cost_column: 13, title: 'Sunday'}};
   }
   this.destination_sheet = undefined;
   this.MAX_NUM_ROWS = 600;
@@ -76,6 +76,14 @@ ScheduleRenderer.prototype.renderEmptySchedule = function() {
     var courseDay = keys[keyIdx];
     outputRows[courseDay] = this.dayTimeSlotLists[courseDay]['startRow'];
   }
+  
+  // render the days of the week titles in appropriate columns of row 1 of spreadsheet
+  var renderDaysColumnTitles = ['M','T','W','R','F'];
+  for (var dayIdx = 0; dayIdx < renderDaysColumnTitles.length; dayIdx++) {
+    var titleStr = this.dayTimeSlotLists[renderDaysColumnTitles[dayIdx]].title.toUpperCase();
+    this.destination_sheet.getRange(1, this.dayTimeSlotLists[renderDaysColumnTitles[dayIdx]].output_column).setValue(titleStr);
+  }
+  
   for (var keyIdx = 0; keyIdx < keys.length; keyIdx++) {
     var courseDay = keys[keyIdx];
     var hideOutput = this.dayTimeSlotLists[courseDay]['hide'];
