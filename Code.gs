@@ -73,6 +73,7 @@ var SHEET_NAME_CONFIGURATION = "Config";
 var SHEET_NAME_COURSE_CONSTRAINTS = "Courses";
 var SHEET_NAME_TIME_SLOTS = "Time Intervals";
 var SHEET_NAME_FACULTY_COURSES_AND_PREFERENCES = "Faculty Prefs & Courses";
+var SHEET_NAME_ROLLED_CRNS = "CRNs";
 var SHEET_NAME_ROOM_SLOTS = "Rooms";
 var SHEET_NAME_COURSE_AND_TIME_CONSTRAINTS = "Pre-Scheduled Courses";
 var SHEET_NAME_OUTPUT_TEMPLATE = "Template";
@@ -908,6 +909,7 @@ function exportToUniversityCourseBuildingFormat() {
   var time_slot_sheet = schedule.getSheetByName(SHEET_NAME_TIME_SLOTS);
   var faculty_sheet = schedule.getSheetByName(SHEET_NAME_FACULTY_COURSES_AND_PREFERENCES);
   var room_slot_sheet = schedule.getSheetByName(SHEET_NAME_ROOM_SLOTS);
+  var rolled_crns_sheet = schedule.getSheetByName(SHEET_NAME_ROLLED_CRNS);
   var prior_schedule_sheet = schedule.getSheetByName(SHEET_NAME_PRIOR_SCHEDULE_SHEET);  
   var export_coursebuilding_sheet = schedule.getSheetByName(SHEET_NAME_EXPORT_COURSE_BUILDING);  
 
@@ -915,10 +917,6 @@ function exportToUniversityCourseBuildingFormat() {
     SpreadsheetApp.getUi().alert('Could not read sheet data.');  
     throw Error( "Exiting due to sheet data access error." );
   }
-
-  // Load Room data 
-  var room_data = room_slot_sheet.getDataRange();
-  var roomList = getRoomsToSchedule(room_data);
   
   // Load Time Interval data
   var time_interval_datarange = time_slot_sheet.getDataRange();
@@ -928,6 +926,14 @@ function exportToUniversityCourseBuildingFormat() {
   var faculty_datarange = faculty_sheet.getDataRange();
   var facultyCoursesAndPrefsList = getFacultyCoursesAndPreferencesToSchedule(faculty_datarange, timeIntervalList);
   
+  // Load Room data 
+  var room_data = room_slot_sheet.getDataRange();
+  var roomList = getRoomsToSchedule(room_data);
+
+  // Load rolled CRN data 
+  var crn_data = rolled_crns_sheet.getDataRange();
+  var crnList = getRolledCRNs(crn_data);
+
   // create a list of the scheduled courses from the "Prior Schedule" sheet
   var scheduledCourseList = [];  
   transferScheduledCourses('READ', prior_schedule_sheet, scheduledCourseList, facultyCoursesAndPrefsList);
@@ -935,9 +941,12 @@ function exportToUniversityCourseBuildingFormat() {
   var xlst_id = 1;
   export_coursebuilding_sheet.getRange(2, 1, 500, 52).clearContent();
   
+  var config_sheet = schedule.getSheetByName(SHEET_NAME_CONFIGURATION);
+  var SEMESTER = config_sheet.getRange(8,3,1,1).getValue();
   
   var attendance_method_list = ['A1 1-25% Online','A2 26-50% Online','A3 51-75% Online','A4 76-99% Online','S1 1-25% Online','S2 26-50% Online','S3 51-75% Online','S4 76-99% Online'];
-
+  var PART_TERM_CODING_DICTIONARY = { Full: '1', T1: 'H1', T2: 'H2'};
+  
   // splits courses listed as instructional mode Hybrid Synchronous or Hybrid Asynchronous
   // create a section for each face-to-face meeting time 
   for (var courseIdx = scheduledCourseList.length-1; courseIdx >= 0; courseIdx--) {
@@ -995,19 +1004,32 @@ function exportToUniversityCourseBuildingFormat() {
       var built_course = [];
       built_course.push("");                                                             // COURSE
       built_course.push(scheduledRoomWithTimeInterval.Course.dept_code);                 // SUBJECT
-      built_course.push(scheduledRoomWithTimeInterval.Course.numbers[crossListingsIdx]); // COURSE_NUMBER
+      var course_number = scheduledRoomWithTimeInterval.Course.numbers[crossListingsIdx];
+      built_course.push(course_number); // COURSE_NUMBER
       var section = scheduledRoomWithTimeInterval.Course.section.toString();
       while (section.length < 3) {
         section = '0' + section;
       }
+      // set second digit of section to '9' value for courses that start 5:00pm or later ==> 'Evening Courses' designation      
       if (scheduledRoomWithTimeInterval.CourseTime.start.getHours() >= 17 && section.substring(1,2) == '0') {
         section = section.substring(0,1) + '9' + section.substring(2);
       }
+      // set second digit of section to '8' value for Summer online courses ==> 'Distant Education Courses' only      
+      if (SEMESTER == "Summer" && scheduledRoomWithTimeInterval.Course.instructional_mode.indexOf('Online') >= 0) {
+        section = section.substring(0,1) + '8' + section.substring(2);
+      }      
       built_course.push(section);                                                        // SECTION
       //var instructionalModeAcronym = defaultScheduleRenderer.instructionalModeToString[courseInstructionalMode];
       built_course.push(scheduledRoomWithTimeInterval.Course.instructional_mode);        // INSTR_MODE      
       built_course.push(scheduledRoomWithTimeInterval.Course.hasOwnProperty('attendance_method') ? scheduledRoomWithTimeInterval.Course.attendance_method : "");         // ATTENDANCE METHOD
-      built_course.push(scheduledRoomWithTimeInterval.Course.crn);                       // CRN
+      var crn = scheduledRoomWithTimeInterval.Course.crn;
+      // find course in list of CRNs (crnList)
+      for (var crnIdx = 0; crnIdx < crnList.length; crnIdx++) {
+        if (crnList[crnIdx].course_number.toString() == course_number && crnList[crnIdx].section == section) {
+            crn = crnList[crnIdx].number;
+        }
+      }
+      built_course.push(crn);                       // CRN
       if (scheduledRoomWithTimeInterval.Course.numbers.length > 1) {
         built_course.push(CROSS_LIST_CODE_PREFIX + xlst_id);                             // XLST ID
       } else {
@@ -1022,7 +1044,8 @@ function exportToUniversityCourseBuildingFormat() {
       built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('F') < 0) ? " " : "F"); // FR
       built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('S') < 0) ? " " : "S"); // SA
       built_course.push((scheduledRoomWithTimeInterval.CourseTime.days.indexOf('U') < 0) ? " " : "U"); // SU
-      built_course.push("");                                                             // PART_TERM
+      var part_term = PART_TERM_CODING_DICTIONARY[scheduledRoomWithTimeInterval.Course.term];
+      built_course.push(part_term);                                                      // PART_TERM
       built_course.push(scheduledRoomWithTimeInterval.CourseTime.getTimeString(scheduledRoomWithTimeInterval.CourseTime.start, '24hr'));   // BEGINS
       built_course.push(scheduledRoomWithTimeInterval.CourseTime.getTimeString(scheduledRoomWithTimeInterval.CourseTime.end, '24hr'));     // ENDS
       built_course.push("");                                                             // FIRST_NAME      
@@ -1487,6 +1510,22 @@ ScheduledCourse.prototype.cloneMe = function() {
     this.FacultyCoursesAndPrefs == undefined ? undefined : this.FacultyCoursesAndPrefs.cloneMe(), 
     copyOfCostArray);
 }
+
+function CRN(number, dept_code, course_number, section) {
+  this.number = number;
+  this.dept_code = dept_code;
+  this.course_number = course_number;
+  this.section = section;
+}
+
+// CRN::clone implementation
+CRN.prototype.cloneMe = function() {
+  return new CRN(this.number, 
+    this.dept_code, 
+    this.course_number, 
+    this.section);
+}
+
 
 function computeNewSchedule() {
   var schedule = SpreadsheetApp.getActiveSpreadsheet();
@@ -2561,6 +2600,36 @@ function importFacultyPreferences(import_faculty_prefs_datarange, courseTimeList
     }
   }
   return importedFacultyPrefsList;
+}
+
+// retrieve CourseTime time interval data
+function getRolledCRNs(crns_datarange) {
+  // HARD-CODED CONSTANTS
+  var COLUMN_INDEX_USE_THIS_CRN = 0;
+  var COLUMN_INDEX_DEPT_CODE = 1;
+  var COLUMN_INDEX_COURSE_NUMBER = 2;
+  var COLUMN_INDEX_SECTION_NUMBER = 3;
+  var COLUMN_INDEX_CRN = 4;  
+  var ROW_INDEX_FIRST_CRN = 1;
+  
+  var crn_data = crns_datarange.getValues();  
+  var crnList=[];
+  
+  for (var rowIdx = ROW_INDEX_FIRST_CRN; rowIdx < crns_datarange.getHeight(); rowIdx++) {
+    var use_this_crn = crn_data[rowIdx][COLUMN_INDEX_USE_THIS_CRN];
+    if (use_this_crn == true) {
+      var dept_code = crn_data[rowIdx][COLUMN_INDEX_DEPT_CODE];
+      var course_number = crn_data[rowIdx][COLUMN_INDEX_COURSE_NUMBER];
+      var section = crn_data[rowIdx][COLUMN_INDEX_SECTION_NUMBER].toString();
+      while (section.length < 3) {
+        section = '0' + section;
+      }
+      var number = crn_data[rowIdx][COLUMN_INDEX_CRN];
+      var crn = new CRN(number, dept_code, course_number, section);
+      crnList.push(crn);
+    }
+  }
+  return crnList;
 }
 
 // identifies rooms and time intervals where nextCourse can be offered under the constraints of the existing scheduledCourseList
