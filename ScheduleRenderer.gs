@@ -1,7 +1,7 @@
-function ScheduleRenderer() {
+function ScheduleRenderer(semester) {
   this.currentSchedule = [];
   this.instructionalModeToString = {
-    'Face to Face': 'F2F', 'Hybrid Simulcast': 'SIM', 'Pure Hybrid': 'HY', 'Online Synchronous': 'IS', 'Online Asynchronous': 'IA'
+    'Face to Face': 'F2F', 'Hybrid Synchronous': 'HYS', 'Hybrid Asynchronous': 'HYA', 'Online Synchronous': 'IS', 'Online Asynchronous': 'IA'
   };
   var timeListMWF = [];
   var roomListMWF = [];
@@ -9,14 +9,25 @@ function ScheduleRenderer() {
   var roomListTR = [];
   var timeListSU = [];
   var roomListSU = [];
-  this.dayTimeSlotLists = { 
-    M: { times: timeListMWF, rooms: roomListMWF, startRow: 1 , hide: false, time_room_column: 1 , output_column: 2 , cost_column: 5 },
-    T: { times: timeListTR , rooms: roomListTR , startRow: 27, hide: false, time_room_column: 6 , output_column: 7 , cost_column: 9 },
-    W: { times: timeListMWF, rooms: roomListMWF, startRow: 1 , hide: true , time_room_column: 1 , output_column: 3 , cost_column: 5 },
-    R: { times: timeListTR , rooms: roomListTR , startRow: 27, hide: true , time_room_column: 6 , output_column: 8 , cost_column: 9 },
-    F: { times: timeListMWF, rooms: roomListMWF, startRow: 1 , hide: true , time_room_column: 1 , output_column: 4 , cost_column: 5 },
-    S: { times: timeListSU , rooms: roomListSU , startRow: 1 , hide: false, time_room_column: 10, output_column: 11, cost_column: 13},
-    U: { times: timeListSU , rooms: roomListSU , startRow: 1 , hide: true , time_room_column: 10, output_column: 12, cost_column: 13}};
+  if (semester == "Summer") {
+    this.dayTimeSlotLists = { 
+      M: { times: timeListMWF, rooms: roomListMWF, startRow: 1, hide: false, time_room_column: 1 , output_column: 2 , cost_column: 7 },
+      T: { times: timeListTR , rooms: roomListTR , startRow: 1, hide:  true, time_room_column: 1 , output_column: 3 , cost_column: 7 },
+      W: { times: timeListMWF, rooms: roomListMWF, startRow: 1, hide:  true, time_room_column: 1 , output_column: 4 , cost_column: 7 },
+      R: { times: timeListTR , rooms: roomListTR , startRow: 1, hide:  true, time_room_column: 1 , output_column: 5 , cost_column: 7 },
+      F: { times: timeListMWF, rooms: roomListMWF, startRow: 1, hide:  true, time_room_column: 1 , output_column: 6 , cost_column: 7 },
+      S: { times: timeListSU , rooms: roomListSU , startRow: 1, hide:  true, time_room_column: 1 , output_column: 8 , cost_column: 7 },
+      U: { times: timeListSU , rooms: roomListSU , startRow: 1, hide:  true, time_room_column: 1 , output_column: 9 , cost_column: 7 }};    
+  } else {
+    this.dayTimeSlotLists = { 
+      M: { times: timeListMWF, rooms: roomListMWF, startRow: 1 , hide: false, time_room_column: 1 , output_column: 2 , cost_column: 5 },
+      T: { times: timeListTR , rooms: roomListTR , startRow: 27, hide: false, time_room_column: 6 , output_column: 7 , cost_column: 9 },
+      W: { times: timeListMWF, rooms: roomListMWF, startRow: 1 , hide: true , time_room_column: 1 , output_column: 3 , cost_column: 5 },
+      R: { times: timeListTR , rooms: roomListTR , startRow: 27, hide: true , time_room_column: 6 , output_column: 8 , cost_column: 9 },
+      F: { times: timeListMWF, rooms: roomListMWF, startRow: 1 , hide: true , time_room_column: 1 , output_column: 4 , cost_column: 5 },
+      S: { times: timeListSU , rooms: roomListSU , startRow: 1 , hide: false, time_room_column: 10, output_column: 11, cost_column: 13},
+      U: { times: timeListSU , rooms: roomListSU , startRow: 1 , hide: true , time_room_column: 10, output_column: 12, cost_column: 13}};
+  }
   this.destination_sheet = undefined;
   this.MAX_NUM_ROWS = 600;
   this.MAX_NUM_COLUMNS = 30;
@@ -109,7 +120,7 @@ ScheduleRenderer.prototype.addCourseToSchedule = function(newScheduledCourse) {
     // check if the time interval is not in the list of candidate time intervals for this day, if not add it and re-draw schedule
     // this only checks for a time slot with a matching start time (it does not match start and end times)
     var timeIntervalIndex = this.findTimeIntervalIndex(dayTimeSlotList, courseTime);
-    if (timeIntervalIndex == -1) {
+    if (timeIntervalIndex == -1 && false) {
       //SpreadsheetApp.getUi().alert('Added new time interval ' +  courseTime.getId() + '.');  
       dayTimeSlotList.push(courseTime);
       dayTimeSlotList.sort(function (a, b) { return a.start - b.start; });
@@ -192,7 +203,7 @@ ScheduleRenderer.prototype.addCourseToSchedule = function(newScheduledCourse) {
     var costColumn = this.dayTimeSlotLists[courseDay]['cost_column'];
     var curCost = this.destination_sheet.getRange( courseTimeAndRoomRow, costColumn).getValue();
     if (curCost != "") {
-      this.destination_sheet.getRange( courseTimeAndRoomRow, costColumn).setValue(curCost + '\n' + courseToRender.cost.toFixed(2));
+      this.destination_sheet.getRange( courseTimeAndRoomRow, costColumn).setValue(curCost + ', ' + courseToRender.cost.toFixed(2));
     } else {
       this.destination_sheet.getRange( courseTimeAndRoomRow, costColumn).setValue(courseToRender.cost.toFixed(2));
     }
