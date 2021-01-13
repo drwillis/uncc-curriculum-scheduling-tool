@@ -152,38 +152,39 @@ function pullUniversityBuiltCoursesAndValidate() {
   */
   // Reports from AA - Nickcoy Findlater have this format
   // Reports from Registrar via Reports Central for No College Designation have this format
-    var COLUMN_INDEX_START_DATE = 0;
+  var COLUMN_INDEX_START_DATE = 0;
   var COLUMN_INDEX_END_DATE = 1;
   var COLUMN_INDEX_SUBJECT = 2;
   var COLUMN_INDEX_COURSE_NUMBER = 3;
   var COLUMN_INDEX_SECTION = 4;
-  var COLUMN_INDEX_CRN_NUMBER = 5;
-  var COLUMN_INDEX_XLST_ID = 6;
-  var COLUMN_INDEX_BILL_HR = 7;    // NOT USED
-  var COLUMN_INDEX_CR = 8;
-  var COLUMN_INDEX_MO = 9;
-  var COLUMN_INDEX_TU = 10;
-  var COLUMN_INDEX_WE = 11;
-  var COLUMN_INDEX_TH = 12;
-  var COLUMN_INDEX_FR = 13;
-  var COLUMN_INDEX_SA = 14;
-  var COLUMN_INDEX_SU = 15;
-  var COLUMN_INDEX_SESSION = 16;  // NOT USED
-  var COLUMN_INDEX_MILITARY_BEGIN = 17;
-  var COLUMN_INDEX_MILITARY_END = 18;
-  var COLUMN_INDEX_INSTRUCTOR_FIRST_NAME = 19; // NOT USED
-  var COLUMN_INDEX_INSTRUCTOR_LAST_NAME = 20;
-  var COLUMN_INDEX_BUILDING = 21;
-  var COLUMN_INDEX_ROOM = 22;
-  var COLUMN_INDEX_MODE = 23;
-  var COLUMN_INDEX_INSTRUCTIONAL_MODE = 24;
-  var COLUMN_INDEX_CAMPUS = 25;
-  var COLUMN_INDEX_ROOM_CAPACITY = 26;
-  var COLUMN_INDEX_MAX = 27;
+  var COLUMN_INDEX_TITLE = 5; // This field started appearing 12/1 for Summer 2021 schedules
+  var COLUMN_INDEX_CRN_NUMBER = 6;
+  var COLUMN_INDEX_XLST_ID = 7;
+  var COLUMN_INDEX_BILL_HR = 8;    // NOT USED
+  var COLUMN_INDEX_CR = 9;
+  var COLUMN_INDEX_MO = 10;
+  var COLUMN_INDEX_TU = 11;
+  var COLUMN_INDEX_WE = 12;
+  var COLUMN_INDEX_TH = 13;
+  var COLUMN_INDEX_FR = 14;
+  var COLUMN_INDEX_SA = 15;
+  var COLUMN_INDEX_SU = 16;
+  var COLUMN_INDEX_PART_TERM = 17;  // NOT USED
+  var COLUMN_INDEX_MILITARY_BEGIN = 18;
+  var COLUMN_INDEX_MILITARY_END = 19;
+  var COLUMN_INDEX_INSTRUCTOR_FIRST_NAME = 20; // NOT USED
+  var COLUMN_INDEX_INSTRUCTOR_LAST_NAME = 21;
+  var COLUMN_INDEX_BUILDING = 22;
+  var COLUMN_INDEX_ROOM = 23;
+  var COLUMN_INDEX_MODE = 24;
+  var COLUMN_INDEX_INSTRUCTIONAL_MODE = 25;
+  var COLUMN_INDEX_CAMPUS = 26;
+  var COLUMN_INDEX_ROOM_CAPACITY = 27;
+  var COLUMN_INDEX_MAX = 28;
   var COLUMN_INDEX_ENR = 28;
   var COLUMN_INDEX_PROJ = 29;
-  var COLUMN_INDEX_PRIOR = 29;
-  var COLUMN_INDEX_STATUS = 30;
+  var COLUMN_INDEX_PRIOR = 30;
+  var COLUMN_INDEX_STATUS = 31;
   // Reports from Registrar via Reports Central for Dept. Worksheet have this format
 /*  var COLUMN_INDEX_PART_OF_TERM = 0;
   var COLUMN_INDEX_COURSE = 1;
@@ -220,6 +221,8 @@ function pullUniversityBuiltCoursesAndValidate() {
   var ROW_INDEX_FIRST_COURSE = 1;
   var NO_DATA_STRING = '.';
 
+  var PART_TERM_DECODING_DICTIONARY = { 1: 'Full', H1: 'T1', H2: 'T2'};
+  
   var schedule = SpreadsheetApp.getActiveSpreadsheet();
   // Load Time Interval data
   var time_slot_sheet = schedule.getSheetByName(SHEET_NAME_TIME_SLOTS);
@@ -315,13 +318,13 @@ function pullUniversityBuiltCoursesAndValidate() {
       } 
       
       try {
-      
+        
         var aaScheduledCourse = new Course(aa_builtcourse[COLUMN_INDEX_SUBJECT], 
                                            aa_builtcourse[COLUMN_INDEX_COURSE_NUMBER],
                                            //aa_builtcourse[COLUMN_INDEX_SECTION].replace('00',''),
                                            aa_builtcourse[COLUMN_INDEX_SECTION],
                                            aa_builtcourse[COLUMN_INDEX_CRN_NUMBER],
-                                           "Full",
+                                           PART_TERM_DECODING_DICTIONARY[aa_builtcourse[COLUMN_INDEX_PART_TERM]],
                                            course_time.days.length * course_time.credit_hours_per_day);
         
       } catch (e) {
@@ -2215,7 +2218,7 @@ function insertPreScheduledCourses(course_and_time_constraint_sheet, output_shee
 function removeFromList(scheduledRoomWithTimeInterval, roomWithTimeInterval, roomWithTimeIntervalList, meetsRemovalCriteria) { 
   // When the building is 'NONE' or 'ONLINE', e.g., 'NONE TBA' or 'ONLINE INTERNET' we do not modify the room availability list (roomWithTimeIntervalList) 
   // as this room is virtual and has an inexaustible supply of space      
-  if (scheduledRoomWithTimeInterval.Room.building != 'NONE' || scheduledRoomWithTimeInterval.Room.building != 'ONLINE') {    
+  if (scheduledRoomWithTimeInterval.Room.building == 'NONE' || scheduledRoomWithTimeInterval.Room.building == 'ONLINE') {    
     return;
   }
   
@@ -2589,7 +2592,7 @@ function importFacultyPreferences(import_faculty_prefs_datarange, courseTimeList
             for (var strIdx = 0; strIdx < prefStringArray.length; strIdx++) {
               avgCost += convertTimePreferenceStringToCost(prefStringArray[strIdx].trim());
             }
-            avgCost /= prefStringArray.length;
+            avgCost /= prefStringArray.length;            
             timeIntervalCostMap[courseTimeList[colIdx + skipIdx - COLUMN_INDEX_PREFS_TIME_INTERVAL_COSTS[0]].getId()] = avgCost;
         } else {
           timeIntervalCostMap[courseTimeList[colIdx + skipIdx - COLUMN_INDEX_PREFS_TIME_INTERVAL_COSTS[0]].getId()] = DEFAULT_PREFS_TIME_INTERVAL_COST;
