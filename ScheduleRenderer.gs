@@ -255,4 +255,3 @@ ScheduleRenderer.prototype.findDaysOfWeekCategoryIndex = function (timeInterval)
   }
   return -1;
 }
-
