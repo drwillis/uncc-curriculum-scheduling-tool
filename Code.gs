@@ -29,14 +29,13 @@
 //      June 15, 2019
 // September 29, 2020
 // November  12, 2020
+// January   22, 2021 
 
 /////////// KNOWN SHORTCOMINGS ///////////
 // NO SEARCH YET, i.e., GREEDY OPTIMIZATION, ASSIGNMENTS ARE SEQUENTIAL WITH NO BACKTRACKING
 // NO VARIABILITY WHEN MULTIPLE OPTIONS HAVE SAME COST: UNDER-CONSTRAINED CHOICES SELECT TIMES AND ROOMS BY TAKING ARRAY INDEX 0
 // CONSISTENCY IN FACULTY->COURSE ASSOCIATIONS ARE NOT ENFORCED (NO SCRIPT-DRIVEN DATA VALIDATION AT THE MOMENT) 
 // CONSISTENCY SPECIFIC: CANNOT DETECT WHEN A COURSE ASSIGNED TO A FACULTY IS NOT IN THE SCHEDULE
-// EXPORT TO COURSE BUILD-OUT SHEET ONLY BASIC FUNCTIONALITY
-// REVISING SCHEDULE SUPPORT IS INCOMPLETE
 // WHAT IS THE BEST ORDERING FOR SCHEDULING COURSES? PRIORITY-BASED ORDERING WORKS BUT IS THERE SOMETHING BETTER?
 // IMPROVE EMAIL FACULTY FUNCTION: PROVIDE SELECTION DIALOG WITH SELECT ALL FUNCTIONALITY
 //
@@ -1614,13 +1613,14 @@ function RunSchedulingEngine(usePriorSchedule) {
   var time_interval_datarange = time_slot_sheet.getDataRange();
   var timeIntervalList = getTimeIntervalsToSchedule(time_interval_datarange);
 
-  // render all time slots 1.5 credit hours or less (75 mins or less)
   var timesToRender = timeIntervalList.filter(function( timeSlot ) {
     if (SEMESTER == "Summer") {
       // FOR SUMMER SCHEDULING
+      // render all time slots 2.0 credit hours or less (100 mins or less)
       return timeSlot.credit_hours_per_day <= 2.0;
     } else {
       // FOR FALL and SPRING SCHEDULING
+      // render all time slots 1.5 credit hours or less (75 mins or less)
       return timeSlot.credit_hours_per_day <= 1.5;  
     }
   });
@@ -1641,20 +1641,8 @@ function RunSchedulingEngine(usePriorSchedule) {
   var roomWithTimeIntervalList=[];
   for (var roomIdx = 0; roomIdx < roomList.length; roomIdx++) {
     for (var timeIdx = 0; timeIdx < timeIntervalList.length; timeIdx++) {
-      // NOTE: many roomWithTimeInterval objects will share references to individual Room objects and individual CourseTime objects 
-      // This saves loads of memory (O(2N) instead of O(N^2)) but we must be mindful that many RoomWithTimeInterval in the RoomWithTimeIntervalList will
-      // point to a single Room or CourseTime object.
-      //roomWithTimeIntervalList.push(new RoomWithTimeInterval(roomList[roomIdx], timeIntervalList[timeIdx]));
-      
-      // new code varies room capacity by time slot
-      var oCourseTime = timeIntervalList[timeIdx];
-      var oRoom = roomList[roomIdx];
-      var copyCourseTime = new CourseTime(oCourseTime.start, oCourseTime.end, oCourseTime.days.join("/"), oCourseTime.credit_hours_per_day, 
-                        oCourseTime.exclude_course_list, oCourseTime.include_course_list, oCourseTime.cost);      
-      var copyRoom = new Room(oRoom.building, oRoom.number, oRoom.maximum_capacity, oRoom.cost);
-      // ALL CLASSES SCHEDULED AS HYBRID CAPACITY
-      // TODO: CAPACITY MUST BE COMPUTED IN THE findRoomWithTimeInterval() function as it depends on both the course, room and time.
-      copyRoom.maximum_capacity = copyRoom.maximum_capacity * oCourseTime.days.length;
+      var copyRoom = roomList[roomIdx].cloneMe();
+      var copyCourseTime = timeIntervalList[timeIdx].cloneMe();
       roomWithTimeIntervalList.push(new RoomWithTimeInterval(copyRoom, copyCourseTime));
     }
   }
@@ -1672,9 +1660,9 @@ function RunSchedulingEngine(usePriorSchedule) {
   //if (roomTestA.building == roomTestB.building && roomTestA.number == roomTestB.number && courseTimeTestA.hasTimeIntervalConflictWith(courseTimeTestB)) {
   //  var aaa=true;
   //}
-  if (!usePriorSchedule) {
-    cost += insertPreScheduledCourses(course_and_time_constraint_sheet, output_sheet_data, roomWithTimeIntervalList, facultyCoursesAndPrefsList, scheduledCourseList);
-  } else {
+
+  // Populate the schedule using the information in the "Prior Schedule" tab
+  if (usePriorSchedule == true) {
     // create a list of the scheduled courses from the "Prior Schedule" sheet
     transferScheduledCourses('READ', prior_schedule_sheet, scheduledCourseList, facultyCoursesAndPrefsList);
     for (var courseIdx = 0; courseIdx < scheduledCourseList.length; courseIdx++) {
@@ -1699,7 +1687,13 @@ function RunSchedulingEngine(usePriorSchedule) {
       Logger.log('ScheduleEngine: Scheduled ' + scheduledCourseList.length + " courses.");
     }
     return;
+    cost += insertPreScheduledCourses(course_and_time_constraint_sheet, output_sheet_data, roomWithTimeIntervalList, facultyCoursesAndPrefsList, scheduledCourseList);
   }
+
+  // Start a new schedule and insert pre-scheduled courses into the new schedule
+  cost += insertPreScheduledCourses(course_and_time_constraint_sheet, output_sheet_data, roomWithTimeIntervalList, facultyCoursesAndPrefsList, scheduledCourseList);
+
+  // Start of the scheduling engine code
   // Greedy Optimization (Proof of Concept)
   //      --> select a course by priority
   //      --> find a room and time-slot cost by lowest total cost
@@ -1745,7 +1739,7 @@ function RunSchedulingEngine(usePriorSchedule) {
     // remove the scheduledRoomWithTimeInterval from the roomWithTimeIntervalList (the index to remove is set in the findRoomWithTimeInterval() function)
     
     // When the building is 'NONE' or 'ONLINE', e.g., 'NONE TBA' or 'ONLINE INTERNET' we do not modify the room availability list (roomWithTimeIntervalList) 
-    // as this room is virtual and has an inexaustible supply of space      
+    // as this room is virtual and has an inexaustible supply of space.
     if (scheduledRoomWithTimeInterval.Room.building != 'NONE' || scheduledRoomWithTimeInterval.Room.building != 'ONLINE') {    
       // for *REAL* classrooms, e.g., those having BUILDING != 'NONE' and BUILDING != 'ONLINE' we must remove the space resource and track remaining space
       roomWithTimeIntervalList.splice(scheduledRoomWithTimeInterval.index, 1);
@@ -2386,10 +2380,11 @@ function parseCourseListElement(str) {
 // retrieve Room data
 function getRoomsToSchedule(room_datarange) {
   // HARD-CODED CONSTANTS
-  var COLUMN_INDEX_BUILDING = 0;
-  var COLUMN_INDEX_ROOM_NUMBER = 1;
-  var COLUMN_INDEX_MAXIMUM_CAPACITY = 2;
-  var COLUMN_INDEX_COST = 3;
+  var COLUMN_INDEX_USE_ROOM = 0;
+  var COLUMN_INDEX_BUILDING = 1;
+  var COLUMN_INDEX_ROOM_NUMBER = 2;
+  var COLUMN_INDEX_MAXIMUM_CAPACITY = 3;
+  var COLUMN_INDEX_COST = 4;
   var ROW_INDEX_FIRST_ROOM = 1;
   
   var room_data = room_datarange.getValues();  
@@ -2397,7 +2392,7 @@ function getRoomsToSchedule(room_datarange) {
   
   for (var rowIdx = ROW_INDEX_FIRST_ROOM; rowIdx < room_datarange.getHeight(); rowIdx++) {
     var building = room_data[rowIdx][COLUMN_INDEX_BUILDING];
-    if (building.trim() == "") {
+    if (room_data[rowIdx][COLUMN_INDEX_USE_ROOM] == false || building.trim() == "") {
       continue;
     }
     var number = room_data[rowIdx][COLUMN_INDEX_ROOM_NUMBER];
@@ -2642,6 +2637,7 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
   var COST_PREFERRED_SIMULTANEOUS_COURSE = -0.25;
   var TARGET_ROOM_OCCUPANCY_PCT = 0.8;
   var COST_ROOM_OCCUPANCY_PCT_MULTIPLIER = 1.0;
+  var COST_ROOM_SIZE_EXCEEDED = 5.0;
   var COST_SLOT_CREDIT_HOUR_MULTIPLIER = 2.0;
   var COST_SLOT_UNOCCUPIED_MULTIPLIER = 2.0;
     
@@ -2860,7 +2856,14 @@ function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, schedule
 
     // check if room expected enrollment < room.maximum_capacity, if not skip this room and time interval
     if (idxIsOK) {
-      if (nextCourse.expected_enrollment <= candidateRoomWithTimeInterval.Room.maximum_capacity) {
+      // CLASSES SCHEDULED AS HYBRID CAPACITY HAVE A LARGER CAPACITY
+      if (nextCourse.isHybrid() && nextCourse.isSynchronous() && 
+          nextCourse.expected_enrollment <= candidateRoomWithTimeInterval.Room.maximum_capacity * candidateRoomWithTimeInterval.CourseTime.days.length) {
+        // add cost on the percent difference of target occupancy percent and occupancy percent if expected number of students enroll
+        costDelta = COST_ROOM_OCCUPANCY_PCT_MULTIPLIER*(Math.abs(TARGET_ROOM_OCCUPANCY_PCT - (nextCourse.expected_enrollment/candidateRoomWithTimeInterval.Room.maximum_capacity)));
+        cost += costDelta;
+        costArr['enrollment'] = costDelta;
+      } else if (nextCourse.expected_enrollment <= candidateRoomWithTimeInterval.Room.maximum_capacity) {
         // add cost on the percent difference of target occupancy percent and occupancy percent if expected number of students enroll
         costDelta = COST_ROOM_OCCUPANCY_PCT_MULTIPLIER*(Math.abs(TARGET_ROOM_OCCUPANCY_PCT - (nextCourse.expected_enrollment/candidateRoomWithTimeInterval.Room.maximum_capacity)));
         cost += costDelta;
