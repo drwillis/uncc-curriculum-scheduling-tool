@@ -765,7 +765,7 @@ function emailFaculty(functionName) {
 
   // construct and send out emails
   var subjectStr;
-  var replyToStr;
+  var replyToStr = SCHEDULE_MANAGER_EMAIL;
   var messagePreLine1;
   var messagePreLine2;
   var messagePostLine1
@@ -773,7 +773,7 @@ function emailFaculty(functionName) {
   if (functionName == 'teaching_schedule') {
     var DEADLINE_DATE = config_sheet.getRange(17,3,1,1).getValue();
     subjectStr = SEMESTER + ' ' + YEAR + ' Course Teaching Schedule (PLEASE REPLY)';
-    replyToStr = SCHEDULE_MANAGER_EMAIL;
+    //replyToStr = SCHEDULE_MANAGER_EMAIL;
     messagePreLine1 = ['Dear ',undefined,',','\n'];
     messagePreLine2 = ['\n','As a final step to course scheduling for ' + SEMESTER + ' ' + YEAR + ' we are asking faculty to review their data within the current teaching schedule.',
                          ' The following table indicates the schedule details for your ' + SEMESTER + ' ' + YEAR + ' course(s):','\n'];
@@ -787,7 +787,7 @@ function emailFaculty(functionName) {
     //SCHEDULE_MANAGER_PHONE_NUMBER = '704-687-8420';
     //DEADLINE_DATE = 'Saturday, September 7';
     subjectStr = SEMESTER + ' ' + YEAR + ' Special Topics Course Titles';
-    replyToStr = SCHEDULE_MANAGER_EMAIL;
+    //replyToStr = SCHEDULE_MANAGER_EMAIL;
     messagePreLine1 = ['Dear ',undefined,',','\n'];
     messagePreLine2 = ['\n','The schedule indicates that you will be teaching one or more special topics courses in ' + SEMESTER + ' ' + YEAR + '.',
                       ' The scheduling system requires a title for each special topics course to add these courses to the schedule.',
@@ -833,7 +833,7 @@ function emailFaculty(functionName) {
       }
       // output a row in the email containing the following: Course Dept. Code, Course Number(s), Section, Time Slot, Days of the Week, Building, Room Number
       var messageSchedule = ['\n'];
-      var caveatVARIOUS = false;
+      var caveatNONETBA = false;
       //messageSchedule.push('COURSE');
       //messageSchedule.push('NUMBER');
       //messageSchedule.push('SECTION');
@@ -868,13 +868,13 @@ function emailFaculty(functionName) {
         messageSchedule.push(scheduledCourse.Room.building);
         messageSchedule.push(scheduledCourse.Room.number);
         messageSchedule.push('\n');
-        if (scheduledCourse.Room.building == 'VARIOUS') {
-          caveatVARIOUS = true;
+        if (scheduledCourse.Room.building == 'NONE' && scheduledCourse.Room.number == 'TBA') {
+          caveatNONETBA = true;
         }
       }
-      if (caveatVARIOUS && functionName == 'teaching_schedule') {
+      if (caveatNONETBA && functionName == 'teaching_schedule') {
         // output message explaining a custom NON-ECE room has been scheduled for clarification on the specific room contact jmconrad@uncc.edu
-        messageSchedule.push('\nYour schedule includes a room listed as VARIOUS. This indicates the room for this course is scheduled into a custom location.');
+        messageSchedule.push('\nYour schedule includes a room listed as \'NONE TBA\'. This indicates the room for this course is scheduled into a custom location.');
         messageSchedule.push('For clarification on the specific location of these courses contact ' + SCHEDULE_MANAGER_EMAIL +'.\n');
       }
                              
