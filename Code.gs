@@ -779,7 +779,7 @@ function emailFaculty(functionName) {
   if (response_test == ui.Button.YES) {
     TEST_EMAIL = true;
   } else {
-    var response_all = ui.alert('Please confirm:', 'Send an email to ALL teaching faculty?', ui.ButtonSet.YES_NO);
+    var response_all = ui.alert('Please confirm:', 'Send an email to ALL faculty selected in the faculty preferences tab?', ui.ButtonSet.YES_NO);
     if (response_all == ui.Button.YES) {
       MASS_DISTRIBUTION_EMAIL = true;
     } else {
@@ -839,6 +839,9 @@ function emailFaculty(functionName) {
       exemptEmail.indexOf(scheduledCourse.FacultyCoursesAndPrefs.email) < 0 && isValidEmailAddress(scheduledCourse.FacultyCoursesAndPrefs.email)) {
       var faculty = scheduledCourse.FacultyCoursesAndPrefs;
       var dstEmailAddress = scheduledCourse.FacultyCoursesAndPrefs.email;
+      var send_schedule_email = scheduledCourse.FacultyCoursesAndPrefs.send_schedule_email;
+      var send_spc_topics_email = scheduledCourse.FacultyCoursesAndPrefs.send_spc_topics_email;
+
       // Find all other courses this faculty member will teach
       // start search from list end so indices don't change when array elements are deleted
       for (var courseIdx = scheduledCourseList.length - 1; courseIdx >= 0; courseIdx--) {
@@ -905,16 +908,23 @@ function emailFaculty(functionName) {
 
       messagePreLine1[1] = faculty.name;
       var mailMessage = messagePreLine1.join('') + messagePreLine2.join('') + messageSchedule.join(' ') + messagePostLine1.join(''); // Second column
-      if ((TEST_EMAIL == true && SENT_TEST_EMAIL == false) || (TEST_EMAIL == false && MASS_DISTRIBUTION_EMAIL == true)) {
+      if ((TEST_EMAIL == true && SENT_TEST_EMAIL == false) || (TEST_EMAIL == false && MASS_DISTRIBUTION_EMAIL == true) && send_schedule_email) {
         if (TEST_EMAIL == true) {
           dstEmailAddress = SCHEDULE_MANAGER_EMAIL;
-          SENT_TEST_EMAIL = true;
+          //SENT_TEST_EMAIL = true;
         }
         logLine = 'emailFaculty ' + functionName + ': Sent notification to ' + dstEmailAddress + '.';
         mgmtMessage += logLine + '\n' + functionName + ': ' + messageSchedule.join('     ');
         Logger.log(logLine);
         // UNCOMMENT THE LINE BELOW TO SEND OUT EMAILS
-        MailApp.sendEmail(dstEmailAddress, replyToStr, subjectStr, mailMessage);
+        //MailApp.sendEmail(dstEmailAddress, replyToStr, subjectStr, mailMessage);
+        MailApp.sendEmail({
+          to: dstEmailAddress,
+          replyTo: replyToStr,
+          cc: SCHEDULE_MANAGER_EMAIL,
+          subject: subjectStr,
+          body: mailMessage
+        });
       }
     } else {
       scheduledCourseList.splice(scheduledCourseList.indexOf(scheduledCourse), 1);
@@ -1484,13 +1494,15 @@ RoomWithTimeInterval.prototype.cloneMe = function () {
 }
 
 // FacultyCoursesAndPrefs class constructor and supporting functions
-function FacultyCoursesAndPrefs(name, email, courseList, timeIntervalCostMap, courses_on_same_days, hours_between_courses) {
+function FacultyCoursesAndPrefs(name, email, courseList, timeIntervalCostMap, courses_on_same_days, hours_between_courses, send_schedule_email, send_spc_topics_email) {
   this.name = name;
   this.email = email;
   this.courseList = courseList;
   this.timeIntervalCostMap = timeIntervalCostMap;
   this.courses_on_same_days = courses_on_same_days;
   this.hours_between_courses = hours_between_courses;
+  this.send_schedule_email = (send_schedule_email == undefined) ? false : send_schedule_email;
+  this.send_spc_topics_email = (send_spc_topics_email == undefined) ? false : send_spc_topics_email;
 }
 
 // FacultyCoursesAndPrefs::getId() function
@@ -1507,7 +1519,9 @@ FacultyCoursesAndPrefs.prototype.cloneMe = function () {
     this.courseList.slice(),
     copyOfTimeIntervalCostMap,
     this.courses_on_same_days,
-    this.hours_between_courses);
+    this.hours_between_courses,
+    this.send_schedule_email,
+    this.send_spc_topics_email);
 }
 
 // ScheduledCourse class constructor and supporting functions
@@ -1833,40 +1847,6 @@ function RunSchedulingEngine(usePriorSchedule) {
   transferScheduledCourses('WRITE', prior_schedule_sheet, scheduledCourseList);
 } // exit engine
 
-/* CONVERT TABS TO CLASSES
-function PriorScheduleTab() {
-  this.COLUMN_INDEX_ADD_TO_SCHEDULE = 0;
-  this.COLUMN_INDEX_DEPARTMENT_CODE = 1;
-  this.COLUMN_INDEX_COURSE_NUMBERS = 2;
-  this.COLUMN_INDEX_SECTION = 3;
-  this.COLUMN_INDEX_INSTRUCTIONAL_MODE = 4;
-  this.COLUMN_INDEX_CRN_NUMBER = 5;
-  this.COLUMN_INDEX_START_TIME = 6;
-  this.COLUMN_INDEX_END_TIME = 7;
-  this.COLUMN_INDEX_CREDIT_HOURS_PER_DAY = 8;
-  this.COLUMN_INDEX_DAYS_OF_WEEK = 9;
-  this.COLUMN_INDEX_BUILDING = 10;
-  this.COLUMN_INDEX_ROOM = 11;
-  this.COLUMN_INDEX_INSTRUCTOR = 12;
-  this.COLUMN_INDEX_INSTRUCTOR_EMAIL = 13;
-  this.COLUMN_INDEX_COST = 14;
-  this.COLUMN_INDEX_COST_ARRAY = 15;
-  this.COLUMN_INDEX_EMAIL_SCHEDULE = 16;
-  this.COLUMN_INDEX_SCHEDULE_CONFIRMED = 17;
-  this.COLUMN_INDEX_EMAIL_SPC_TOPICS_TITLE = 18;
-  this.ROW_INDEX_FIRST_COURSE = 1;
-  this.NUM_COLUMNS_PER_COURSE = 14;
-  this.MAX_COURSES = 200
-  // TODO: THE FOLLOWING 2 CONSTANTS APPEAR IN 3 DIFFERENT PLACES IN THE CODE AND MUST BE THE SAME DECLARED VALUES!
-  this.COST_FACULTY_SAME_DAYS_PREFERENCE = 2.0;
-  this.COST_FACULTY_TIME_BETWEEN_CLASSES_PREFERENCE = 0.5;  
-}
-
-PriorScheduleTab.prototype.transferScheduledCourses = function(transferMode, prior_schedule_sheet, 
-                                                               scheduledCourseList, facultyCoursesAndPrefsList) {
-
-}*/
-
 // write scheduled courses to a sheet
 function transferScheduledCourses(transferMode, prior_schedule_sheet, scheduledCourseList, facultyCoursesAndPrefsList) {
   var COLUMN_INDEX_ADD_TO_SCHEDULE = 0;
@@ -1886,9 +1866,7 @@ function transferScheduledCourses(transferMode, prior_schedule_sheet, scheduledC
   var COLUMN_INDEX_INSTRUCTOR_EMAIL = 14;
   var COLUMN_INDEX_COST = 15;
   var COLUMN_INDEX_COST_ARRAY = 16;
-  var COLUMN_INDEX_EMAIL_SCHEDULE = 17;
-  var COLUMN_INDEX_SCHEDULE_CONFIRMED = 18;
-  var COLUMN_INDEX_EMAIL_SPC_TOPICS_TITLE = 19;
+
   var ROW_INDEX_FIRST_COURSE = 1;
   var NUM_COLUMNS_PER_COURSE = 15;
   var MAX_COURSES = 200
@@ -1966,7 +1944,7 @@ function transferScheduledCourses(transferMode, prior_schedule_sheet, scheduledC
         var teacher_scheduledCourseList = [];
         var costDelta = 0;
 
-        // Find the faculty member teaching this course (nextCourse) store the data in teacherForThisCourse      
+        // Find the faculty member teaching this course (preScheduledCourse) store the data in teacherForThisCourse      
         for (var facultyIdx = 0; teacherForThisCourse == undefined && facultyIdx < facultyCoursesAndPrefsList.length; facultyIdx++) {
           var faculty = facultyCoursesAndPrefsList[facultyIdx];
           for (var courseIdx = 0; courseIdx < faculty.courseList.length; courseIdx++) {
@@ -2468,10 +2446,13 @@ function getFacultyCoursesAndPreferencesToSchedule(faculty_datarange, courseTime
   var COLUMN_INDEX_FACULTY_NAME = 0;
   var COLUMN_INDEX_FACULTY_EMAIL = 1;
   var COLUMN_INDEX_COURSE_ASSIGNMENTS_RANGE = [2, 10];
-  var COLUMN_INDEX_AT_RISK = 11;
-  var COLUMN_INDEX_PREFS_SAME_DAYS = 12;
-  var COLUMN_INDEX_PREFS_HOURS_BETWEEN_COURSES = 13;
-  var COLUMN_INDEX_PREFS_TIME_INTERVAL_COSTS = [15, 39];
+  var COLUMN_INDEX_EMAIL_SCHEDULE = 11;
+  var COLUMN_INDEX_EMAIL_SPC_TOPICS_TITLE = 12;
+  var COLUMN_INDEX_SCHEDULE_CONFIRMED = 13;
+  var COLUMN_INDEX_AT_RISK = 14;
+  var COLUMN_INDEX_PREFS_SAME_DAYS = 15;
+  var COLUMN_INDEX_PREFS_HOURS_BETWEEN_COURSES = 16;
+  var COLUMN_INDEX_PREFS_TIME_INTERVAL_COSTS = [18, 42];
   var DEFAULT_PREFS_TIME_INTERVAL_COST = 0;
   var ROW_INDEX_FIRST_FACULTY = 3;
 
@@ -2482,6 +2463,8 @@ function getFacultyCoursesAndPreferencesToSchedule(faculty_datarange, courseTime
   for (var rowIdx = ROW_INDEX_FIRST_FACULTY; rowIdx < faculty_datarange.getHeight(); rowIdx++) {
     var name = faculty_courses_and_prefs_data[rowIdx][COLUMN_INDEX_FACULTY_NAME];
     var email = faculty_courses_and_prefs_data[rowIdx][COLUMN_INDEX_FACULTY_EMAIL];
+    var email_schedule = faculty_courses_and_prefs_data[rowIdx][COLUMN_INDEX_EMAIL_SCHEDULE];
+    var email_spc_topics_title = faculty_courses_and_prefs_data[rowIdx][COLUMN_INDEX_EMAIL_SPC_TOPICS_TITLE];
     if (name != "") {
       var courseList = [];
       for (var colIdx = COLUMN_INDEX_COURSE_ASSIGNMENTS_RANGE[0]; colIdx <= COLUMN_INDEX_COURSE_ASSIGNMENTS_RANGE[1]; colIdx++) {
@@ -2513,7 +2496,8 @@ function getFacultyCoursesAndPreferencesToSchedule(faculty_datarange, courseTime
           }
         }
       }
-      var faculty_courses_and_prefs = new FacultyCoursesAndPrefs(name, email, courseList, timeIntervalCostMap, courses_on_same_days, hours_between_courses);
+      var faculty_courses_and_prefs = new FacultyCoursesAndPrefs(name, email, courseList, timeIntervalCostMap, courses_on_same_days,
+        hours_between_courses, email_schedule, email_spc_topics_title);
       facultyCoursesAndPrefsList.push(faculty_courses_and_prefs);
     }
   }
