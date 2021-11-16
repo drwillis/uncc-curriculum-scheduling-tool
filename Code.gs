@@ -30,6 +30,7 @@
 // September 29, 2020
 // November  12, 2020
 // January   22, 2021 
+// November  15, 2021 
 
 /////////// KNOWN SHORTCOMINGS ///////////
 // NO SEARCH YET, i.e., GREEDY OPTIMIZATION, ASSIGNMENTS ARE SEQUENTIAL WITH NO BACKTRACKING
@@ -74,6 +75,7 @@ var SHEET_NAME_TIME_SLOTS = "Time Intervals";
 var SHEET_NAME_FACULTY_COURSES_AND_PREFERENCES = "Faculty Prefs & Courses";
 var SHEET_NAME_ROLLED_CRNS = "CRNs";
 var SHEET_NAME_ROOM_SLOTS = "Rooms";
+var SHEET_NAME_TEXTBOOKS = "Textbooks";
 var SHEET_NAME_COURSE_AND_TIME_CONSTRAINTS = "Pre-Scheduled Courses";
 var SHEET_NAME_OUTPUT_TEMPLATE = "Template";
 var SHEET_NAME_OUTPUT_SHEET = "Schedule Output";
@@ -736,12 +738,22 @@ function emailFaculty(functionName) {
     SpreadsheetApp.getUi().alert('emailFaculty() invoked with invalid functionName = ' + functionName + '.');
     throw Error("Exiting due to script error.");
   }
+
+  var task_teaching_schedule_email = false;
+  var task_special_topics_email = false;
+  if (functionName == 'teaching_schedule') {
+    task_teaching_schedule_email = true;
+  } else if (functionName == 'special_topics_course_titles') {
+    task_special_topics_email = true;
+  }
+
   var schedule = SpreadsheetApp.getActiveSpreadsheet();
   var time_slot_sheet = schedule.getSheetByName(SHEET_NAME_TIME_SLOTS);
   var faculty_sheet = schedule.getSheetByName(SHEET_NAME_FACULTY_COURSES_AND_PREFERENCES);
   var prior_schedule_sheet = schedule.getSheetByName(SHEET_NAME_PRIOR_SCHEDULE_SHEET);
+  var textbook_sheet = schedule.getSheetByName(SHEET_NAME_TEXTBOOKS);
 
-  if (!schedule || !faculty_sheet || !prior_schedule_sheet) {
+  if (!schedule || !faculty_sheet || !prior_schedule_sheet || !textbook_sheet) {
     SpreadsheetApp.getUi().alert('Could not read sheet data.');
     throw Error("Exiting due to sheet data access error.");
   }
@@ -754,12 +766,15 @@ function emailFaculty(functionName) {
   var faculty_datarange = faculty_sheet.getDataRange();
   var facultyCoursesAndPrefsList = getFacultyCoursesAndPreferencesToSchedule(faculty_datarange, timeIntervalList);
 
+  // Load course Textbook information
+  var textbooks_datarange = textbook_sheet.getDataRange();
+  var textbookList = getTextbooks(textbooks_datarange);
+
   // create a list of the scheduled courses from the "Prior Schedule" sheet
   var scheduledCourseList = [];
   transferScheduledCourses('READ', prior_schedule_sheet, scheduledCourseList, facultyCoursesAndPrefsList);
 
   // emails will not be sent to email addresses in the exemptEmail array
-  //var exemptEmail = ['nbousaba@uncc.edu','brodri17@uncc.edu'];
   var exemptEmail = [];
 
   // Form letter email constants that change each semester / year  
@@ -779,7 +794,9 @@ function emailFaculty(functionName) {
   if (response_test == ui.Button.YES) {
     TEST_EMAIL = true;
   } else {
-    var response_all = ui.alert('Please confirm:', 'Send an email to ALL faculty selected in the faculty preferences tab?', ui.ButtonSet.YES_NO);
+    var column_title = (task_teaching_schedule_email==true) ? '\'EMAIL SCHEDULE\'' : '\'SPECIAL TOPICS EMAIL\''
+    var send_emails_dialog_titlestr = 'Send an email to ALL faculty selected in the ' + column_title + ' column of the faculty preferences tab?'
+    var response_all = ui.alert('Please confirm:', send_emails_dialog_titlestr, ui.ButtonSet.YES_NO);
     if (response_all == ui.Button.YES) {
       MASS_DISTRIBUTION_EMAIL = true;
     } else {
@@ -793,24 +810,26 @@ function emailFaculty(functionName) {
   var replyToStr = SCHEDULE_MANAGER_EMAIL;
   var messagePreLine1;
   var messagePreLine2;
-  var messagePostLine1
+  var messagePostLine1;
   var mgmtMessage = "Log for emailFaculty " + functionName + ":\n";
-  if (functionName == 'teaching_schedule') {
+
+  if (task_teaching_schedule_email == true) {
+    // course assignment, schedula and textbook email content
     var DEADLINE_DATE = config_sheet.getRange(17, 3, 1, 1).getValue();
     subjectStr = SEMESTER + ' ' + YEAR + ' Course Teaching Schedule (PLEASE REPLY)';
     //replyToStr = SCHEDULE_MANAGER_EMAIL;
     messagePreLine1 = ['Dear ', undefined, ',', '\n'];
     messagePreLine2 = ['\n', 'As a final step to course scheduling for ' + SEMESTER + ' ' + YEAR + ' we are asking faculty to review their data within the current teaching schedule.',
       ' The following table indicates the schedule details for your ' + SEMESTER + ' ' + YEAR + ' course(s):', '\n'];
-    messagePostLine1 = ['\n', 'Please confirm your schedule by responding to this email as soon as possible or, at latest, by close of business ' + DEADLINE_DATE + '.', '\n', '\n',
+    messageTextbookLine = ['\n\n', 'The standard textbooks for your courses are listed below.',
+      ' If you would like to use a textbook different from the textbooks listed below make sure to contact ' + SCHEDULE_MANAGER + ' with the updated textbook information.', 
+      ' If no response is received, the standard textbooks will be adopted for use in your course instruction.','\n'];
+    messagePostLine1 = ['\n', 'Please confirm your schedule and course textbooks by responding to this email as soon as possible or, at latest, by close of business ' + DEADLINE_DATE + '.', '\n', '\n',
       'If you have any questions regarding your schedule please contact ' + SCHEDULE_MANAGER + ' (' + SCHEDULE_MANAGER_EMAIL + ') by replying to this email or calling '
       + SCHEDULE_MANAGER_PHONE_NUMBER + '.', '\n'];
-  } else if (functionName == 'special_topics_course_titles') {
+  } else if (task_special_topics_email == true) {
+    // special topics email content
     var DEADLINE_DATE = config_sheet.getRange(20, 3, 1, 1).getValue();
-    //SCHEDULE_MANAGER = 'Andrew Willis';
-    //SCHEDULE_MANAGER_EMAIL = 'arwillis@uncc.edu';
-    //SCHEDULE_MANAGER_PHONE_NUMBER = '704-687-8420';
-    //DEADLINE_DATE = 'Saturday, September 7';
     subjectStr = SEMESTER + ' ' + YEAR + ' Special Topics Course Titles';
     //replyToStr = SCHEDULE_MANAGER_EMAIL;
     messagePreLine1 = ['Dear ', undefined, ',', '\n'];
@@ -825,7 +844,6 @@ function emailFaculty(functionName) {
   }
 
   var logLine;
-  var SENT_TEST_EMAIL = false;
   var term2Strings = { 'Full': 'Full-Term', 'T1': 'Term-1', 'T2': 'Term-2' };
 
   while (scheduledCourseList.length > 0) {
@@ -835,6 +853,8 @@ function emailFaculty(functionName) {
     //scheduledCourseList.splice( scheduledCourseList.indexOf(scheduledCourse), 1);
     // find the faculty email if available
     var facultyScheduledCourses = [];
+    var facultyCourseTextbooks = [];
+
     if (scheduledCourse.FacultyCoursesAndPrefs != undefined && scheduledCourse.FacultyCoursesAndPrefs.email != undefined &&
       exemptEmail.indexOf(scheduledCourse.FacultyCoursesAndPrefs.email) < 0 && isValidEmailAddress(scheduledCourse.FacultyCoursesAndPrefs.email)) {
       var faculty = scheduledCourse.FacultyCoursesAndPrefs;
@@ -846,19 +866,45 @@ function emailFaculty(functionName) {
       // start search from list end so indices don't change when array elements are deleted
       for (var courseIdx = scheduledCourseList.length - 1; courseIdx >= 0; courseIdx--) {
         if (scheduledCourseList[courseIdx].FacultyCoursesAndPrefs != undefined && scheduledCourseList[courseIdx].FacultyCoursesAndPrefs.email == dstEmailAddress) {
-          if (functionName == 'teaching_schedule') {
+          if (task_teaching_schedule_email == true) {
             facultyScheduledCourses.push(scheduledCourseList[courseIdx]);
-          } else if (functionName == 'special_topics_course_titles' && scheduledCourseList[courseIdx].Course.isSpecialTopics()) {
+            teaching_schedule_email = true;
+          } else if (task_special_topics_email == true && scheduledCourseList[courseIdx].Course.isSpecialTopics()) {
             facultyScheduledCourses.push(scheduledCourseList[courseIdx]);
+            special_topics_email = true;
           }
           // remove the course (scheduledCourseList[courseIdx]) from the list of courses which require email notifications to be send
           scheduledCourseList.splice(scheduledCourseList.indexOf(scheduledCourseList[courseIdx]), 1);
         }
       }
+
       // do not send notifications to faculty that have no courses scheduled relevant to functionName (no course assignments/no special topics courses)
       if (facultyScheduledCourses.length == 0) {
         continue;
       }
+
+      // find the textbooks associated with the courses this faculty member is instructing
+      for (var courseIdx = facultyScheduledCourses.length - 1; courseIdx >= 0; courseIdx--) {
+        var facultyCourseDeptCode = facultyScheduledCourses[courseIdx].Course.dept_code;
+        var foundTextbook = false;
+        for (var courseNumberIdx = facultyScheduledCourses[courseIdx].Course.numbers.length - 1; courseNumberIdx >= 0; courseNumberIdx--) {
+          var facultyCourseNumber = facultyScheduledCourses[courseIdx].Course.numbers[courseNumberIdx];
+          for (var textbookIdx = textbookList.length - 1; textbookIdx >= 0; textbookIdx--) {
+            if (facultyCourseDeptCode === textbookList[textbookIdx].dept_code &&
+                  facultyCourseNumber === textbookList[textbookIdx].course_number) {
+              facultyCourseTextbooks.push(textbookList[textbookIdx]);
+              foundTextbook = true;
+              Logger.log('Found the textbook: ' + textbookList[textbookIdx].getId());
+            }
+          }
+        }
+        if (foundTextbook == false) {
+          facultyCourseTextbooks.push(new Textbook(facultyCourseDeptCode, facultyScheduledCourses[courseIdx].Course.numbers.join('/'), 
+                  '** PLEASE DESIGNATE THE TEXTBOOK INFORMATION FOR THIS COURSE ** including the following:' + 'isbn-13',
+                  'authors', 'title', 'publisher', 'year'));
+        }
+      }
+
       // output a row in the email containing the following: Course Dept. Code, Course Number(s), Section, Time Slot, Days of the Week, Building, Room Number
       var messageSchedule = ['\n'];
       var caveatNONETBA = false;
@@ -900,23 +946,38 @@ function emailFaculty(functionName) {
           caveatNONETBA = true;
         }
       }
-      if (caveatNONETBA && functionName == 'teaching_schedule') {
+
+      var messageTextbooks = ['\n'];
+      for (var textbookIdx = 0; textbookIdx < facultyCourseTextbooks.length; textbookIdx++) {
+        messageTextbooks.push(' ' + facultyCourseTextbooks[textbookIdx].getId() + '\n');
+      }
+
+      if (caveatNONETBA && task_teaching_schedule_email) {
         // output message explaining a custom NON-ECE room has been scheduled for clarification on the specific room contact jmconrad@uncc.edu
         messageSchedule.push('\nYour schedule includes a room listed as \'NONE TBA\'. This indicates the room for this course is scheduled into a custom location.');
         messageSchedule.push('For clarification on the specific location of these courses contact ' + SCHEDULE_MANAGER_EMAIL + '.\n');
       }
 
       messagePreLine1[1] = faculty.name;
-      var mailMessage = messagePreLine1.join('') + messagePreLine2.join('') + messageSchedule.join(' ') + messagePostLine1.join(''); // Second column
-      if ((TEST_EMAIL == true && SENT_TEST_EMAIL == false) || (TEST_EMAIL == false && MASS_DISTRIBUTION_EMAIL == true) && send_schedule_email) {
+      var mailMessage;
+      if (task_teaching_schedule_email == true) {
+        mailMessage = messagePreLine1.join('') + messagePreLine2.join('') + messageSchedule.join(' ')
+                        + messageTextbookLine.join('') + messageTextbooks.join('')
+                        + messagePostLine1.join(''); // Second column
+      } else if (task_special_topics_email == true) {
+        mailMessage = messagePreLine1.join('') + messagePreLine2.join('') + messageSchedule.join(' ') 
+                          + messagePostLine1.join(''); // Second column
+      }
+      if ((TEST_EMAIL == true || MASS_DISTRIBUTION_EMAIL == true) && 
+          ((send_schedule_email == true && task_teaching_schedule_email == true) || // true if task is to send teaching schedule and this row is selected
+          (send_spc_topics_email == true && task_special_topics_email == true))) { // true if task is to send special topics title request and this row is selected
         if (TEST_EMAIL == true) {
           dstEmailAddress = SCHEDULE_MANAGER_EMAIL;
-          //SENT_TEST_EMAIL = true;
         }
         logLine = 'emailFaculty ' + functionName + ': Sent notification to ' + dstEmailAddress + '.';
         mgmtMessage += logLine + '\n' + functionName + ': ' + messageSchedule.join('     ');
         Logger.log(logLine);
-        // UNCOMMENT THE LINE BELOW TO SEND OUT EMAILS
+        // THE LINE BELOW SENDS OUT EMAILS TO FACULTY
         //MailApp.sendEmail(dstEmailAddress, replyToStr, subjectStr, mailMessage);
         MailApp.sendEmail({
           to: dstEmailAddress,
@@ -1567,6 +1628,33 @@ CRN.prototype.cloneMe = function () {
     this.section);
 }
 
+function Textbook(dept_code, course_number, isbn13, authors, title, publisher, year) {
+  this.dept_code = dept_code;
+  this.course_number = course_number;
+  this.isbn13 = isbn13;
+  this.authors = authors;
+  this.title = title;
+  this.publisher = publisher;
+  this.year = year;
+}
+
+// Textbook::getId() function
+Textbook.prototype.getId = function () {
+  var textbookName = (this.FacultyCoursesAndPrefs != undefined) ? this.FacultyCoursesAndPrefs.name : undefined;
+  return this.dept_code + '-' + this.course_number + ': ' + this.authors + ', ' + this.title + ', ' + 
+  this.publisher + ', ' + this.year + '. (ISBN 13: ' + this.isbn13 + ')';
+}
+
+// Textbook::clone implementation
+Textbook.prototype.cloneMe = function () {
+  return new Textbook(this.dept_code,
+    this.course_number,
+    this.isbn13,
+    this.authors,
+    this.title,
+    this.pulisher,
+    this.year);
+}
 
 function computeNewSchedule() {
   var schedule = SpreadsheetApp.getActiveSpreadsheet();
@@ -2638,6 +2726,40 @@ function getRolledCRNs(crns_datarange) {
   }
   return crnList;
 }
+
+// retrieve course Textbook data
+function getTextbooks(textbook_datarange) {
+  // HARD-CODED CONSTANTS
+  var COLUMN_INDEX_USE_THIS_TEXTBOOK = 0;
+  var COLUMN_INDEX_DEPT_CODE = 1;
+  var COLUMN_INDEX_COURSE_NUMBER = 2;
+  var COLUMN_INDEX_ISBN13 = 3;
+  var COLUMN_INDEX_AUTHORS = 4;
+  var COLUMN_INDEX_TITLE = 5;
+  var COLUMN_INDEX_PUBLISHER = 6;
+  var COLUMN_INDEX_YEAR = 7;
+  var ROW_INDEX_FIRST_TEXTBOOK = 1;
+
+  var textbook_data = textbook_datarange.getValues();
+  var textbookList = [];
+
+  for (var rowIdx = ROW_INDEX_FIRST_TEXTBOOK; rowIdx < textbook_datarange.getHeight(); rowIdx++) {
+    var use_this_textbook = textbook_data[rowIdx][COLUMN_INDEX_USE_THIS_TEXTBOOK];
+    if (use_this_textbook == true) {
+      var dept_code = textbook_data[rowIdx][COLUMN_INDEX_DEPT_CODE].toString().trim();
+      var course_number = textbook_data[rowIdx][COLUMN_INDEX_COURSE_NUMBER].toString().trim();
+      var isbn13 = textbook_data[rowIdx][COLUMN_INDEX_ISBN13].toString().trim();
+      var authors = textbook_data[rowIdx][COLUMN_INDEX_AUTHORS].toString().trim();
+      var title = textbook_data[rowIdx][COLUMN_INDEX_TITLE].toString().trim();
+      var publisher = textbook_data[rowIdx][COLUMN_INDEX_PUBLISHER].toString().trim();
+      var year = textbook_data[rowIdx][COLUMN_INDEX_YEAR].toString().trim();
+      var textbook = new Textbook(dept_code, course_number, isbn13, authors, title, publisher, year);
+      textbookList.push(textbook);
+    }
+  }
+  return textbookList;
+}
+
 
 // identifies rooms and time intervals where nextCourse can be offered under the constraints of the existing scheduledCourseList
 function findRoomWithTimeInterval(roomWithTimeIntervalList, nextCourse, scheduledCourseList, facultyCoursesAndPrefsList) {
