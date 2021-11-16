@@ -26,10 +26,11 @@
 //
 // The ECE Course Scheduling Engine
 // Andrew Willis
+//
 //      June 15, 2019
 // September 29, 2020
 // November  12, 2020
-// January   22, 2021 
+// January   22, 2021
 // November  15, 2021 
 
 /////////// KNOWN SHORTCOMINGS ///////////
@@ -975,7 +976,8 @@ function emailFaculty(functionName) {
           dstEmailAddress = SCHEDULE_MANAGER_EMAIL;
         }
         logLine = 'emailFaculty ' + functionName + ': Sent notification to ' + dstEmailAddress + '.';
-        mgmtMessage += logLine + '\n' + functionName + ': ' + messageSchedule.join('     ');
+        mgmtMessage += logLine + '\n' + functionName + ': ' + messageSchedule.join('     ') 
+                        + 'Textbooks:' + messageTextbooks.join('') + '\n';
         Logger.log(logLine);
         // THE LINE BELOW SENDS OUT EMAILS TO FACULTY
         //MailApp.sendEmail(dstEmailAddress, replyToStr, subjectStr, mailMessage);
