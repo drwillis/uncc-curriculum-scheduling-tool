@@ -32,7 +32,8 @@
 // September 29, 2020
 // November  12, 2020
 // January   22, 2021
-// November  15, 2021 
+// November  15, 2021
+// January   17, 2022
 
 /////////// KNOWN SHORTCOMINGS ///////////
 // NO SEARCH YET, i.e., GREEDY OPTIMIZATION, ASSIGNMENTS ARE SEQUENTIAL WITH NO BACKTRACKING
@@ -3233,7 +3234,7 @@ function addCourseToSchedule(output_sheet_data, newScheduledCourse) {
 // returns the row index of the room in the output sheet
 function findRoomRowsInOutputSheet(output_sheet_data, room_id, columnIdx, start_rowIdx, end_rowIdx) {
   var roomRowIdxs = [];
-  for (var qrowIdx = start_rowIdx; qrowIdx < end_rowIdx; qrowIdx++) {
+  for (var qrowIdx = start_rowIdx; qrowIdx < end_rowIdx && qrowIdx < output_sheet_data.getNumRows(); qrowIdx++) {
     var cellValue = output_sheet_data.getCell(qrowIdx, columnIdx).getValue();
     if (cellValue === room_id) { // careful for whitespace!
       roomRowIdxs.push(qrowIdx);
