@@ -1,7 +1,7 @@
 // 
 // This file is part of the UNCC ECE Scheduling Software and distributed 
 // as a Google script embedded as part of a Google Sheets Spreadsheet
-// Copyright (c) 2019, 2020, 2021 Andrew Willis, All rights reserved.
+// Copyright (c) 2019, 2020, 2021, 2022 Andrew Willis, All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -25,6 +25,7 @@
 
 //
 // The ECE Course Scheduling Engine
+//
 // Andrew Willis
 //
 //      June 15, 2019
@@ -39,8 +40,11 @@
 // CONSISTENCY IN FACULTY->COURSE ASSOCIATIONS ARE NOT ENFORCED (NO SCRIPT-DRIVEN DATA VALIDATION AT THE MOMENT) 
 // CONSISTENCY SPECIFIC: CANNOT DETECT WHEN A COURSE ASSIGNED TO A FACULTY IS NOT IN THE SCHEDULE
 // WHAT IS THE BEST ORDERING FOR SCHEDULING COURSES? PRIORITY-BASED ORDERING WORKS BUT IS THERE SOMETHING BETTER?
-// IMPROVE EMAIL FACULTY FUNCTION: PROVIDE SELECTION DIALOG WITH SELECT ALL FUNCTIONALITY
-//
+// EMAIL FACULTY SCHEDULE ONLY WORKS WHEN 1 FACULTY MEMBER IS TEACHING EACH COURSE
+// WORKAROUND: SELECT EACH FACULTY MEMBER SEPARATELY AND RUN THE SEND EMAIL FUNCTION FOR TEAM TAUGHT COURSES
+// TODO: IN THE EMAIL LOOP OVER COURSES FIND ALL FACULTY TEACHING THE COURSE AND WHEN MULTIPLE FACULTY
+//       TEACH A COURSE SEND A SINGLE TO BOTH FACULTY TO CONFIRM THEIR SCHEDULE TOGETHER FOR THESE TEAM-TEACHING COURSES
+//       THE BIG CHANGE WOULD THEN BE TO MAKE THE INSTRUCTOR FIELD FOR A COURSE A LIST OF STRINGS/INSTRUCTOR IDs RATHER THAN A SINGLE STRING 
 
 // Create google sheet menu items
 function onOpen() {
@@ -822,7 +826,7 @@ function emailFaculty(functionName) {
     messagePreLine1 = ['Dear ', undefined, ',', '\n'];
     messagePreLine2 = ['\n', 'As a final step to course scheduling for ' + SEMESTER + ' ' + YEAR + ' we are asking faculty to review their data within the current teaching schedule.',
       ' The following table indicates the schedule details for your ' + SEMESTER + ' ' + YEAR + ' course(s):', '\n'];
-    messageTextbookLine = ['\n\n', 'The standard textbooks for your courses are listed below.',
+    messageTextbookLine = ['\n', 'The standard textbooks for your courses are listed below.',
       ' If you would like to use a textbook different from the textbooks listed below make sure to contact ' + SCHEDULE_MANAGER + ' with the updated textbook information.', 
       ' If no response is received, the standard textbooks will be adopted for use in your course instruction.','\n'];
     messagePostLine1 = ['\n', 'Please confirm your schedule and course textbooks by responding to this email as soon as possible or, at latest, by close of business ' + DEADLINE_DATE + '.', '\n', '\n',
@@ -2599,10 +2603,13 @@ function putFacultyCoursesAndPreferences(faculty_datarange, courseTimeList, facu
   var COLUMN_INDEX_FACULTY_NAME = 0;
   var COLUMN_INDEX_FACULTY_EMAIL = 1;
   var COLUMN_INDEX_COURSE_ASSIGNMENTS_RANGE = [2, 10];
-  var COLUMN_INDEX_AT_RISK = 11;
-  var COLUMN_INDEX_PREFS_SAME_DAYS = 12;
-  var COLUMN_INDEX_PREFS_HOURS_BETWEEN_COURSES = 13;
-  var COLUMN_INDEX_PREFS_TIME_INTERVAL_COSTS = [15, 39];
+  var COLUMN_INDEX_EMAIL_SCHEDULE = 11;
+  var COLUMN_INDEX_EMAIL_SPC_TOPICS_TITLE = 12;
+  var COLUMN_INDEX_SCHEDULE_CONFIRMED = 13;
+  var COLUMN_INDEX_AT_RISK = 14;
+  var COLUMN_INDEX_PREFS_SAME_DAYS = 15;
+  var COLUMN_INDEX_PREFS_HOURS_BETWEEN_COURSES = 16;
+  var COLUMN_INDEX_PREFS_TIME_INTERVAL_COSTS = [18, 42];
   var DEFAULT_PREFS_TIME_INTERVAL_COST = 0;
   var ROW_INDEX_FIRST_FACULTY = 3;
 
